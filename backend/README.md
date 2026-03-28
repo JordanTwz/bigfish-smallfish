@@ -17,7 +17,7 @@ cp .env.example .env
 ## Start Postgres
 
 ```bash
-docker compose up -d
+docker compose up -d db
 ```
 
 ## Run Migrations
@@ -26,8 +26,20 @@ docker compose up -d
 alembic upgrade head
 ```
 
+## Run Migrations In Docker
+
+```bash
+docker compose run --rm api alembic upgrade head
+```
+
 ## Run API
 
 ```bash
 uvicorn app.main:app --reload
+```
+
+## Run API In Docker
+
+```bash
+docker compose up --build api
 ```
