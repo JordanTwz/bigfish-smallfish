@@ -61,6 +61,109 @@ alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
+## End-to-End Flow
+
+1. Configure `.env` with:
+
+```env
+DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/bigfish_smallfish
+TINYFISH_API_KEY=your_tinyfish_key_here
+OPENAI_API_KEY=your_openai_key_here
+```
+
+2. Rebuild and run the API container:
+
+```bash
+docker compose up -d --build --force-recreate api
+```
+
+3. Apply migrations:
+
+```bash
+docker compose run --rm api alembic upgrade head
+```
+
+4. Create a research job for the target:
+
+```bash
+curl -X POST http://localhost:8000/research-jobs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "candidate_name": "Guido van Rossum",
+    "company_name": "Microsoft",
+    "company_domain": "microsoft.com",
+    "role_title": "Distinguished Engineer",
+    "search_context": "Public professional profile search"
+  }'
+```
+
+5. Poll the research job until it is `completed` or `partial`:
+
+```bash
+curl http://localhost:8000/research-jobs/<job_id>
+```
+
+6. Inspect the sources found for that target:
+
+```bash
+curl http://localhost:8000/research-jobs/<job_id>/sources
+```
+
+7. Generate resonance-oriented blog drafts:
+
+```bash
+curl -X POST http://localhost:8000/research-jobs/<job_id>/blog-drafts \
+  -H "Content-Type: application/json" \
+  -d '{
+    "goal": "resonance",
+    "draft_count": 3,
+    "target_length": "medium",
+    "style_constraints": "Write with technical rigor and specificity. Avoid generic leadership platitudes.",
+    "persona_constraints": "Do not mimic the target. Optimize for depth, clarity, and authentic engineering curiosity."
+  }'
+```
+
+8. Poll the blog draft job and fetch the generated drafts:
+
+```bash
+curl http://localhost:8000/blog-draft-jobs/<blog_draft_job_id>
+curl http://localhost:8000/blog-draft-jobs/<blog_draft_job_id>/drafts
+```
+
+9. Generate persona-building posts for the client using the same research job:
+
+```bash
+curl -X POST http://localhost:8000/research-jobs/<job_id>/persona-post-jobs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "goal": "credibility",
+    "draft_count": 2,
+    "target_length": "medium",
+    "client_name": "Jane Smith",
+    "client_profile": {
+      "current_role": "Backend engineer",
+      "interests": ["distributed systems", "observability", "developer tooling"],
+      "voice_notes": ["technical", "clear", "curious"]
+    },
+    "requested_angles": ["client_voice", "expert_commentary"],
+    "style_constraints": "Write with technical depth and specificity. Avoid hype.",
+    "persona_constraints": "Do not impersonate a real authority or fabricate endorsement."
+  }'
+```
+
+10. Poll the persona post job and fetch the drafts:
+
+```bash
+curl http://localhost:8000/persona-post-jobs/<persona_post_job_id>
+curl http://localhost:8000/persona-post-jobs/<persona_post_job_id>/drafts
+```
+
+The overall lifecycle is:
+
+- `research-jobs` gather structured evidence about the target with TinyFish
+- `blog-draft-jobs` turn that evidence into reviewable technical article drafts with OpenAI
+- `persona-post-jobs` turn that evidence into client-facing and expert-commentary style persona drafts with OpenAI
+
 ## Debug Run API
 
 These endpoints are still useful for low-level debugging, but the product flow should use the research job endpoints below.
