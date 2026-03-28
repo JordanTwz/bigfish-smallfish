@@ -32,8 +32,8 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
 
   return (
     <main className="min-h-screen px-4 py-5 text-[15px] text-foreground md:px-6 lg:px-8">
-      <div className="mx-auto flex max-w-[1500px] flex-col gap-5 xl:flex-row">
-        <aside className="xl:sticky xl:top-5 xl:h-[calc(100vh-2.5rem)] xl:w-[320px] xl:flex-none">
+      <div className="mx-auto flex max-w-[1500px] flex-col gap-5 lg:flex-row">
+        <aside className="lg:sticky lg:top-5 lg:h-[calc(100vh-2.5rem)] lg:w-[320px] lg:flex-none">
           <div className="flex h-full flex-col overflow-hidden rounded-[28px] border border-[var(--line)] bg-[var(--paper)] shadow-[var(--shadow)] backdrop-blur">
             <div className="border-b border-[var(--line)] px-6 py-5">
               <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-[var(--muted-soft)]">
@@ -44,16 +44,10 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
                 Every target lives here. Open one dossier at a time through dedicated routes, not tab state.
               </p>
               <div className="mt-5 flex gap-2">
-                <Link
-                  className="rounded-full bg-[var(--ink)] px-4 py-2 text-sm text-white hover:bg-[var(--accent-deep)]"
-                  href="/workspaces/new"
-                >
+                <Link className="rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white transition hover:bg-[var(--accent-deep)]" href="/workspaces/new">
                   New target
                 </Link>
-                <Link
-                  className="rounded-full border border-[var(--line)] px-4 py-2 text-sm hover:bg-white/50"
-                  href="/"
-                >
+                <Link className="rounded-full border border-[var(--line)] bg-white/65 px-4 py-2 text-sm font-medium text-[var(--ink)] transition hover:bg-white" href="/">
                   Home
                 </Link>
               </div>
@@ -103,7 +97,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
                             className={classNames(
                               "rounded-full px-3 py-1.5 text-xs transition",
                               pathname?.endsWith(`/${section}`)
-                                ? "bg-[var(--ink)] text-white"
+                                ? "bg-[var(--accent)] text-white"
                                 : "bg-white/65 text-[var(--muted)] hover:bg-[var(--accent-soft)] hover:text-[var(--ink)]",
                             )}
                             href={`/workspaces/${workspace.id}/${section}`}

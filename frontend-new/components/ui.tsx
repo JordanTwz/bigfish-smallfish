@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 import { classNames } from "@/lib/workspaces";
 
@@ -24,6 +24,35 @@ export function PagePanel({
       </div>
       <div className="mt-5">{children}</div>
     </section>
+  );
+}
+
+export function Button({
+  children,
+  variant = "secondary",
+  className,
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: "primary" | "secondary" | "soft";
+}) {
+  const variantClassName =
+    variant === "primary"
+      ? "bg-[var(--accent)] text-white hover:bg-[var(--accent-deep)]"
+      : variant === "soft"
+        ? "bg-[var(--accent-soft)] text-[var(--accent-deep)] hover:bg-[rgba(196,106,47,0.2)]"
+        : "border border-[var(--line)] bg-white/65 text-[var(--ink)] hover:bg-white";
+
+  return (
+    <button
+      className={classNames(
+        "rounded-full px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50",
+        variantClassName,
+        className,
+      )}
+      {...props}
+    >
+      {children}
+    </button>
   );
 }
 

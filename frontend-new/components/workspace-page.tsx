@@ -15,7 +15,7 @@ import {
   type WorkspaceSection,
 } from "@/lib/workspaces";
 import { useWorkspaceStore } from "./workspace-provider";
-import { EmptyState, Field, KeyValue, MetricCard, PagePanel, StatusPill, TextField, Token } from "./ui";
+import { Button, EmptyState, Field, KeyValue, MetricCard, PagePanel, StatusPill, TextField, Token } from "./ui";
 
 export function WorkspacePage({
   workspaceId,
@@ -66,6 +66,9 @@ export function WorkspacePage({
   const safeAngles = Array.isArray(discoveryInsights?.safe_content_angles)
     ? (discoveryInsights?.safe_content_angles as Array<Record<string, unknown>>)
     : [];
+  const draftReadinessIssue = getDraftReadinessIssue(workspace);
+  const blogJobError = readJobError(workspace?.blogJob?.error_jsonb);
+  const personaJobError = readJobError(workspace?.personaJob?.error_jsonb);
 
   if (!ready) {
     return (
@@ -138,14 +141,14 @@ export function WorkspacePage({
               title="Mission Brief"
               kicker="Research"
               aside={
-                <button
-                  className="rounded-full border border-[var(--line)] px-4 py-2 text-sm hover:bg-white/50 disabled:opacity-50"
+                <Button
                   disabled={!workspace.researchJobId || pendingAction === "refresh-research"}
                   onClick={() => void refreshResearch(workspaceId)}
                   type="button"
+                  variant="secondary"
                 >
                   {pendingAction === "refresh-research" ? "Refreshing..." : "Refresh Research"}
-                </button>
+                </Button>
               }
             >
               <div className="grid gap-4 md:grid-cols-2">
@@ -195,14 +198,14 @@ export function WorkspacePage({
               title="Action Engine"
               kicker="Opportunities"
               aside={
-                <button
-                  className="rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--accent-deep)] disabled:opacity-50"
+                <Button
                   disabled={!workspace.researchJobId || pendingAction === "create-opportunities"}
                   onClick={() => void createOpportunityRun(workspaceId)}
                   type="button"
+                  variant="primary"
                 >
                   {pendingAction === "create-opportunities" ? "Ranking..." : "Generate Opportunities"}
-                </button>
+                </Button>
               }
             >
               <p className="text-sm leading-7 text-[var(--muted)]">
@@ -228,22 +231,22 @@ export function WorkspacePage({
               kicker="Change detection"
               aside={
                 <div className="flex flex-wrap gap-2">
-                  <button
-                    className="rounded-full border border-[var(--line)] px-4 py-2 text-sm hover:bg-white/50 disabled:opacity-50"
+                  <Button
                     disabled={!workspace.researchJobId || pendingAction === "create-monitor"}
                     onClick={() => void createMonitorRun(workspaceId)}
                     type="button"
+                    variant="secondary"
                   >
                     {pendingAction === "create-monitor" ? "Creating..." : "Capture Baseline"}
-                  </button>
-                  <button
-                    className="rounded-full bg-[var(--ink)] px-4 py-2 text-sm text-white disabled:opacity-50"
+                  </Button>
+                  <Button
                     disabled={!workspace.monitorJobId || pendingAction === "refresh-monitor"}
                     onClick={() => void refreshMonitorRun(workspaceId)}
                     type="button"
+                    variant="primary"
                   >
                     {pendingAction === "refresh-monitor" ? "Checking..." : "Refresh Monitor"}
-                  </button>
+                  </Button>
                 </div>
               }
             >
@@ -272,25 +275,35 @@ export function WorkspacePage({
                 kicker="Long form"
                 aside={
                   <div className="flex gap-2">
-                    <button
-                      className="rounded-full border border-[var(--line)] px-4 py-2 text-sm hover:bg-white/50 disabled:opacity-50"
+                    <Button
                       disabled={!workspace.blogJobId || pendingAction === "refresh-blog"}
                       onClick={() => void refreshBlogRun(workspaceId)}
                       type="button"
+                      variant="secondary"
                     >
                       Refresh
-                    </button>
-                    <button
-                      className="rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--accent-deep)] disabled:opacity-50"
-                      disabled={!workspace.researchJobId || pendingAction === "create-blog"}
+                    </Button>
+                    <Button
+                      disabled={!workspace.researchJobId || Boolean(draftReadinessIssue) || pendingAction === "create-blog"}
                       onClick={() => void createBlogRun(workspaceId, buildDraftPayload(blogForm, workspace))}
                       type="button"
+                      variant="primary"
                     >
                       {pendingAction === "create-blog" ? "Generating..." : "Generate Blog Drafts"}
-                    </button>
+                    </Button>
                   </div>
                 }
               >
+                {draftReadinessIssue ? (
+                  <div className="mb-5 rounded-[20px] border border-[rgba(196,106,47,0.18)] bg-[rgba(196,106,47,0.08)] px-4 py-3 text-sm leading-6 text-[var(--accent-deep)]">
+                    {draftReadinessIssue}
+                  </div>
+                ) : null}
+                {blogJobError ? (
+                  <div className="mb-5 rounded-[20px] border border-[rgba(142,61,49,0.2)] bg-[rgba(142,61,49,0.08)] px-4 py-3 text-sm leading-6 text-[var(--danger)]">
+                    {blogJobError}
+                  </div>
+                ) : null}
                 <DraftControls form={blogForm} setForm={setBlogForm} />
                 <div className="mt-6 grid gap-3">
                   {workspace.blogDrafts.length ? workspace.blogDrafts.map((draft) => <DraftCard key={draft.id} item={draft} />) : <EmptyState message="No blog drafts yet. Create a draft job after research completes." />}
@@ -302,25 +315,35 @@ export function WorkspacePage({
                 kicker="Short form"
                 aside={
                   <div className="flex gap-2">
-                    <button
-                      className="rounded-full border border-[var(--line)] px-4 py-2 text-sm hover:bg-white/50 disabled:opacity-50"
+                    <Button
                       disabled={!workspace.personaJobId || pendingAction === "refresh-persona"}
                       onClick={() => void refreshPersonaRun(workspaceId)}
                       type="button"
+                      variant="secondary"
                     >
                       Refresh
-                    </button>
-                    <button
-                      className="rounded-full bg-[var(--ink)] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-                      disabled={!workspace.researchJobId || pendingAction === "create-persona"}
+                    </Button>
+                    <Button
+                      disabled={!workspace.researchJobId || Boolean(draftReadinessIssue) || pendingAction === "create-persona"}
                       onClick={() => void createPersonaRun(workspaceId, buildDraftPayload(personaForm, workspace))}
                       type="button"
+                      variant="primary"
                     >
                       {pendingAction === "create-persona" ? "Generating..." : "Generate Persona Posts"}
-                    </button>
+                    </Button>
                   </div>
                 }
               >
+                {draftReadinessIssue ? (
+                  <div className="mb-5 rounded-[20px] border border-[rgba(196,106,47,0.18)] bg-[rgba(196,106,47,0.08)] px-4 py-3 text-sm leading-6 text-[var(--accent-deep)]">
+                    {draftReadinessIssue}
+                  </div>
+                ) : null}
+                {personaJobError ? (
+                  <div className="mb-5 rounded-[20px] border border-[rgba(142,61,49,0.2)] bg-[rgba(142,61,49,0.08)] px-4 py-3 text-sm leading-6 text-[var(--danger)]">
+                    {personaJobError}
+                  </div>
+                ) : null}
                 <DraftControls form={personaForm} setForm={setPersonaForm} />
                 <div className="mt-6 grid gap-3">
                   {workspace.personaDrafts.length ? workspace.personaDrafts.map((draft) => <DraftCard key={draft.id} item={draft} />) : <EmptyState message="No persona posts yet. This endpoint currently reuses the blog draft backend flow." />}
@@ -505,4 +528,34 @@ function DraftCard({ item }: { item: BlogDraftResponse }) {
       {item.disclosure_note ? <p className="mt-4 text-sm leading-6 text-[var(--muted)]">{item.disclosure_note}</p> : null}
     </article>
   );
+}
+
+function getDraftReadinessIssue(workspace: {
+  researchJob: { status: string } | null;
+  sources: Array<unknown>;
+}) {
+  const status = workspace.researchJob?.status;
+  if (!status) {
+    return "Run target research first before generating drafts.";
+  }
+  if (!["completed", "partial"].includes(status)) {
+    return `Draft generation unlocks after research finishes. Current research status: ${status}.`;
+  }
+  if (!workspace.sources.length) {
+    return "Draft generation requires at least one discovered source.";
+  }
+  return null;
+}
+
+function readJobError(value: unknown) {
+  const record = readRecord(value);
+  if (!record) {
+    return null;
+  }
+  const stage = typeof record.stage === "string" ? record.stage : null;
+  const message = typeof record.message === "string" ? record.message : null;
+  if (!stage && !message) {
+    return null;
+  }
+  return [stage, message].filter(Boolean).join(": ");
 }

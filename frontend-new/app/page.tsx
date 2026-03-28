@@ -9,7 +9,7 @@ export default function HomePage() {
         This UI is now organized as separate pages per target and per workflow section. Use the left sidebar to jump between targets, or create a new target workspace to begin a research run.
       </p>
       <div className="mt-8 flex gap-3">
-        <Link className="rounded-full bg-[var(--ink)] px-5 py-3 text-sm text-white hover:bg-[var(--accent-deep)]" href="/workspaces/new">
+        <Link className="rounded-full bg-[var(--accent)] px-5 py-3 text-sm font-medium text-white transition hover:bg-[var(--accent-deep)]" href="/workspaces/new">
           Create target
         </Link>
       </div>

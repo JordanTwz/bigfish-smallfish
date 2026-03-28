@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 
-import { PagePanel, Field, TextField } from "@/components/ui";
+import { Button, PagePanel, Field, TextField } from "@/components/ui";
 import { useWorkspaceStore } from "@/components/workspace-provider";
 import { buildResearchPayload } from "@/lib/workspace-builders";
 import { initialIntake, type IntakeForm } from "@/lib/workspaces";
@@ -15,20 +15,24 @@ export function WorkspaceIntake() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const workspaceId = await createWorkspace({
-      title: form.title.trim() || form.candidateName.trim(),
-      candidateName: form.candidateName.trim(),
-      companyName: form.companyName.trim(),
-      companyDomain: form.companyDomain.trim(),
-      roleTitle: form.roleTitle.trim(),
-      searchContext: form.searchContext.trim(),
-      clientName: form.clientName.trim(),
-      clientRole: form.clientRole.trim(),
-      clientInterests: form.clientInterests.trim(),
-      clientStrengths: form.clientStrengths.trim(),
-      payload: buildResearchPayload(form),
-    });
-    router.push(`/workspaces/${workspaceId}/brief`);
+    try {
+      const workspaceId = await createWorkspace({
+        title: form.title.trim() || form.candidateName.trim(),
+        candidateName: form.candidateName.trim(),
+        companyName: form.companyName.trim(),
+        companyDomain: form.companyDomain.trim(),
+        roleTitle: form.roleTitle.trim(),
+        searchContext: form.searchContext.trim(),
+        clientName: form.clientName.trim(),
+        clientRole: form.clientRole.trim(),
+        clientInterests: form.clientInterests.trim(),
+        clientStrengths: form.clientStrengths.trim(),
+        payload: buildResearchPayload(form),
+      });
+      router.push(`/workspaces/${workspaceId}/brief`);
+    } catch {
+      return;
+    }
   }
 
   return (
@@ -46,13 +50,9 @@ export function WorkspaceIntake() {
           <Field label="Client strengths" value={form.clientStrengths} onChange={(value) => setForm((current) => ({ ...current, clientStrengths: value }))} />
         </div>
         <TextField label="Search context" rows={5} value={form.searchContext} onChange={(value) => setForm((current) => ({ ...current, searchContext: value }))} />
-        <button
-          className="w-fit rounded-full bg-[var(--ink)] px-5 py-3 text-sm font-medium text-white transition hover:bg-[var(--accent-deep)] disabled:opacity-50"
-          disabled={pendingAction === "create-workspace"}
-          type="submit"
-        >
+        <Button className="w-fit px-5 py-3" disabled={pendingAction === "create-workspace"} type="submit" variant="primary">
           {pendingAction === "create-workspace" ? "Launching research..." : "Create workspace"}
-        </button>
+        </Button>
       </form>
     </PagePanel>
   );
