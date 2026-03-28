@@ -55,6 +55,11 @@ def get_research_job(db: Session, job_id: UUID) -> ResearchJob | None:
     return db.get(ResearchJob, job_id)
 
 
+def list_research_jobs(db: Session) -> list[ResearchJob]:
+    stmt = select(ResearchJob).order_by(ResearchJob.updated_at.desc(), ResearchJob.created_at.desc())
+    return list(db.scalars(stmt))
+
+
 def list_research_job_sources(db: Session, job_id: UUID) -> list[SourceCandidate]:
     stmt = select(SourceCandidate).where(SourceCandidate.research_job_id == job_id)
     return list(db.scalars(stmt.order_by(SourceCandidate.created_at.desc())))
@@ -189,6 +194,11 @@ def get_blog_draft_job(db: Session, blog_draft_job_id: UUID) -> BlogDraftJob | N
     return db.get(BlogDraftJob, blog_draft_job_id)
 
 
+def list_blog_draft_jobs_for_research_job(db: Session, research_job_id: UUID) -> list[BlogDraftJob]:
+    stmt = select(BlogDraftJob).where(BlogDraftJob.research_job_id == research_job_id)
+    return list(db.scalars(stmt.order_by(BlogDraftJob.created_at.desc())))
+
+
 def list_blog_drafts(db: Session, blog_draft_job_id: UUID) -> list[BlogDraft]:
     stmt = select(BlogDraft).where(BlogDraft.blog_draft_job_id == blog_draft_job_id)
     return list(db.scalars(stmt.order_by(BlogDraft.created_at.asc())))
@@ -274,6 +284,11 @@ def get_opportunity_job(db: Session, opportunity_job_id: UUID) -> OpportunityJob
     return db.get(OpportunityJob, opportunity_job_id)
 
 
+def list_opportunity_jobs_for_research_job(db: Session, research_job_id: UUID) -> list[OpportunityJob]:
+    stmt = select(OpportunityJob).where(OpportunityJob.research_job_id == research_job_id)
+    return list(db.scalars(stmt.order_by(OpportunityJob.created_at.desc())))
+
+
 def list_opportunities(db: Session, opportunity_job_id: UUID) -> list[Opportunity]:
     stmt = select(Opportunity).where(Opportunity.opportunity_job_id == opportunity_job_id)
     return list(db.scalars(stmt.order_by(Opportunity.priority_score.desc(), Opportunity.created_at.asc())))
@@ -355,6 +370,11 @@ def create_monitor_job(db: Session, research_job: ResearchJob, payload: MonitorJ
 
 def get_monitor_job(db: Session, monitor_job_id: UUID) -> MonitorJob | None:
     return db.get(MonitorJob, monitor_job_id)
+
+
+def list_monitor_jobs_for_research_job(db: Session, research_job_id: UUID) -> list[MonitorJob]:
+    stmt = select(MonitorJob).where(MonitorJob.research_job_id == research_job_id)
+    return list(db.scalars(stmt.order_by(MonitorJob.created_at.desc())))
 
 
 def list_monitor_events(db: Session, monitor_job_id: UUID) -> list[MonitorEvent]:

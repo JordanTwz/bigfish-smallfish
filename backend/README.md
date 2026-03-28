@@ -79,10 +79,24 @@ When the job is done, the response includes:
 - a final brief
 - `discovery_insights` with public interest signals, safe content angles, and credibility opportunities
 
+List recent research jobs:
+
+```bash
+curl http://localhost:8000/research-jobs
+```
+
 ### 3. Inspect sources
 
 ```bash
 curl http://localhost:8000/research-jobs/<job_id>/sources
+```
+
+Fetch downstream job history for a research job:
+
+```bash
+curl http://localhost:8000/research-jobs/<job_id>/opportunity-jobs
+curl http://localhost:8000/research-jobs/<job_id>/monitor-jobs
+curl http://localhost:8000/research-jobs/<job_id>/blog-draft-jobs
 ```
 
 ## Opportunities

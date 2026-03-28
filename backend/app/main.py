@@ -74,6 +74,11 @@ def create_research_job(
     return research_job
 
 
+@app.get("/research-jobs", response_model=list[ResearchJobResponse])
+def read_research_jobs(db: Session = Depends(get_db)) -> list[ResearchJobResponse]:
+    return crud.list_research_jobs(db)
+
+
 @app.get("/research-jobs/{job_id}", response_model=ResearchJobResponse)
 def read_research_job(job_id: UUID, db: Session = Depends(get_db)) -> ResearchJobResponse:
     research_job = crud.get_research_job(db, job_id)
@@ -88,6 +93,39 @@ def read_research_job_sources(job_id: UUID, db: Session = Depends(get_db)) -> li
     if research_job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Research job not found")
     return crud.list_research_job_sources(db, job_id)
+
+
+@app.get("/research-jobs/{job_id}/opportunity-jobs", response_model=list[OpportunityJobResponse])
+def read_research_job_opportunity_jobs(
+    job_id: UUID,
+    db: Session = Depends(get_db),
+) -> list[OpportunityJobResponse]:
+    research_job = crud.get_research_job(db, job_id)
+    if research_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Research job not found")
+    return crud.list_opportunity_jobs_for_research_job(db, job_id)
+
+
+@app.get("/research-jobs/{job_id}/monitor-jobs", response_model=list[MonitorJobResponse])
+def read_research_job_monitor_jobs(
+    job_id: UUID,
+    db: Session = Depends(get_db),
+) -> list[MonitorJobResponse]:
+    research_job = crud.get_research_job(db, job_id)
+    if research_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Research job not found")
+    return crud.list_monitor_jobs_for_research_job(db, job_id)
+
+
+@app.get("/research-jobs/{job_id}/blog-draft-jobs", response_model=list[BlogDraftJobResponse])
+def read_research_job_blog_draft_jobs(
+    job_id: UUID,
+    db: Session = Depends(get_db),
+) -> list[BlogDraftJobResponse]:
+    research_job = crud.get_research_job(db, job_id)
+    if research_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Research job not found")
+    return crud.list_blog_draft_jobs_for_research_job(db, job_id)
 
 
 @app.post("/research-jobs/{job_id}/refresh", response_model=ResearchJobResponse)
