@@ -14,6 +14,8 @@ Set these values in `.env`:
 DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/bigfish_smallfish
 TINYFISH_API_KEY=your_tinyfish_key_here
 OPENAI_API_KEY=your_openai_key_here
+MATAROA_USERNAME=your_mataroa_username
+MATAROA_PASSWORD=your_mataroa_password
 ```
 
 Start the API and database:
@@ -198,6 +200,15 @@ curl http://localhost:8000/persona-post-jobs/<persona_post_job_id>/drafts
 ```
 
 `expert_commentary` is non-attributed editorial commentary, not a fake endorsement.
+
+## Mataroa Publish
+
+Fetch the latest generated blog draft and publish it to Mataroa with TinyFish:
+
+```bash
+curl http://localhost:8000/blog-drafts/latest
+curl -X POST http://localhost:8000/blog-drafts/latest/publish
+```
 
 ## Debug Endpoints
 

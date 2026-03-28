@@ -104,6 +104,15 @@ class BlogDraftResponse(BaseModel):
     updated_at: datetime
 
 
+class BlogDraftPublishResponse(BaseModel):
+    draft: BlogDraftResponse
+    tinyfish_run_id: str
+    status: str
+    published_url: str | None = None
+    result_jsonb: dict[str, Any] | None = None
+    error_jsonb: dict[str, Any] | None = None
+
+
 class BlogDraftJobResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
