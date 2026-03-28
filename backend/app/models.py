@@ -57,6 +57,9 @@ class ResearchJob(Base):
     blog_draft_jobs: Mapped[list["BlogDraftJob"]] = relationship(
         back_populates="research_job", cascade="all, delete-orphan"
     )
+    opportunity_jobs: Mapped[list["OpportunityJob"]] = relationship(
+        back_populates="research_job", cascade="all, delete-orphan"
+    )
 
 
 class SourceCandidate(Base):
@@ -171,3 +174,53 @@ class BlogDraft(Base):
     )
 
     blog_draft_job: Mapped["BlogDraftJob"] = relationship(back_populates="drafts")
+
+
+class OpportunityJob(Base):
+    __tablename__ = "opportunity_jobs"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    research_job_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("research_jobs.id", ondelete="CASCADE"), index=True
+    )
+    status: Mapped[str] = mapped_column(String(64), index=True, default="queued")
+    summary_jsonb: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    error_jsonb: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    research_job: Mapped["ResearchJob"] = relationship(back_populates="opportunity_jobs")
+    items: Mapped[list["Opportunity"]] = relationship(
+        back_populates="opportunity_job", cascade="all, delete-orphan"
+    )
+
+
+class Opportunity(Base):
+    __tablename__ = "opportunities"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    opportunity_job_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("opportunity_jobs.id", ondelete="CASCADE"), index=True
+    )
+    type: Mapped[str] = mapped_column(String(64), index=True)
+    title: Mapped[str] = mapped_column(String(512))
+    description: Mapped[str] = mapped_column(String(4096))
+    target_url: Mapped[str | None] = mapped_column(String(2048))
+    theme: Mapped[str | None] = mapped_column(String(255))
+    estimated_impact: Mapped[float | None] = mapped_column(Float)
+    estimated_effort: Mapped[float | None] = mapped_column(Float)
+    confidence: Mapped[float | None] = mapped_column(Float)
+    why_now: Mapped[str | None] = mapped_column(String(2048))
+    supporting_sources_jsonb: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
+    recommended_asset_type: Mapped[str | None] = mapped_column(String(64))
+    priority_score: Mapped[float | None] = mapped_column(Float, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    opportunity_job: Mapped["OpportunityJob"] = relationship(back_populates="items")

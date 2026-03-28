@@ -4,7 +4,16 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import BlogDraft, BlogDraftJob, ResearchJob, Run, SourceCandidate, TinyfishRun
+from app.models import (
+    BlogDraft,
+    BlogDraftJob,
+    Opportunity,
+    OpportunityJob,
+    ResearchJob,
+    Run,
+    SourceCandidate,
+    TinyfishRun,
+)
 from app.schemas import BlogDraftJobCreate, ResearchJobCreate, RunCreate
 
 
@@ -242,3 +251,81 @@ def create_blog_draft(
     db.commit()
     db.refresh(blog_draft)
     return blog_draft
+
+
+def create_opportunity_job(db: Session, research_job: ResearchJob) -> OpportunityJob:
+    opportunity_job = OpportunityJob(research_job_id=research_job.id)
+    db.add(opportunity_job)
+    db.commit()
+    db.refresh(opportunity_job)
+    return opportunity_job
+
+
+def get_opportunity_job(db: Session, opportunity_job_id: UUID) -> OpportunityJob | None:
+    return db.get(OpportunityJob, opportunity_job_id)
+
+
+def list_opportunities(db: Session, opportunity_job_id: UUID) -> list[Opportunity]:
+    stmt = select(Opportunity).where(Opportunity.opportunity_job_id == opportunity_job_id)
+    return list(db.scalars(stmt.order_by(Opportunity.priority_score.desc(), Opportunity.created_at.asc())))
+
+
+def update_opportunity_job_status(
+    db: Session,
+    opportunity_job: OpportunityJob,
+    status: str,
+    *,
+    summary_jsonb: dict | None = None,
+    error_jsonb: dict | None = None,
+    finished: bool = False,
+) -> OpportunityJob:
+    opportunity_job.status = status
+    opportunity_job.updated_at = datetime.now(timezone.utc)
+    if summary_jsonb is not None:
+        opportunity_job.summary_jsonb = summary_jsonb
+    if error_jsonb is not None:
+        opportunity_job.error_jsonb = error_jsonb
+    if finished:
+        opportunity_job.finished_at = datetime.now(timezone.utc)
+    db.add(opportunity_job)
+    db.commit()
+    db.refresh(opportunity_job)
+    return opportunity_job
+
+
+def create_opportunity(
+    db: Session,
+    *,
+    opportunity_job_id: UUID,
+    type: str,
+    title: str,
+    description: str,
+    target_url: str | None,
+    theme: str | None,
+    estimated_impact: float | None,
+    estimated_effort: float | None,
+    confidence: float | None,
+    why_now: str | None,
+    supporting_sources_jsonb: list[dict] | None,
+    recommended_asset_type: str | None,
+    priority_score: float | None,
+) -> Opportunity:
+    opportunity = Opportunity(
+        opportunity_job_id=opportunity_job_id,
+        type=type,
+        title=title,
+        description=description,
+        target_url=target_url,
+        theme=theme,
+        estimated_impact=estimated_impact,
+        estimated_effort=estimated_effort,
+        confidence=confidence,
+        why_now=why_now,
+        supporting_sources_jsonb=supporting_sources_jsonb,
+        recommended_asset_type=recommended_asset_type,
+        priority_score=priority_score,
+    )
+    db.add(opportunity)
+    db.commit()
+    db.refresh(opportunity)
+    return opportunity

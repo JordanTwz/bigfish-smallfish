@@ -11,6 +11,8 @@ from app.schemas import (
     BlogDraftJobCreate,
     BlogDraftJobResponse,
     BlogDraftResponse,
+    OpportunityJobResponse,
+    OpportunityResponse,
     ResearchJobCreate,
     ResearchJobResponse,
     RunCreate,
@@ -18,6 +20,7 @@ from app.schemas import (
     SourceCandidateResponse,
 )
 from app.services.blog_drafts import enqueue_blog_draft_job
+from app.services.opportunity_engine import enqueue_opportunity_job
 from app.services.orchestrator import enqueue_research_job
 
 app = FastAPI(title=settings.app_name)
@@ -95,6 +98,40 @@ def refresh_research_job(
         background_tasks.add_task(enqueue_research_job, str(research_job.id))
         research_job = crud.get_research_job(db, job_id)
     return research_job
+
+
+@app.post(
+    "/research-jobs/{job_id}/opportunities",
+    response_model=OpportunityJobResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_opportunity_job(
+    job_id: UUID,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> OpportunityJobResponse:
+    research_job = crud.get_research_job(db, job_id)
+    if research_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Research job not found")
+    opportunity_job = crud.create_opportunity_job(db, research_job)
+    background_tasks.add_task(enqueue_opportunity_job, str(opportunity_job.id))
+    return opportunity_job
+
+
+@app.get("/opportunity-jobs/{opportunity_job_id}", response_model=OpportunityJobResponse)
+def read_opportunity_job(opportunity_job_id: UUID, db: Session = Depends(get_db)) -> OpportunityJobResponse:
+    opportunity_job = crud.get_opportunity_job(db, opportunity_job_id)
+    if opportunity_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Opportunity job not found")
+    return opportunity_job
+
+
+@app.get("/opportunity-jobs/{opportunity_job_id}/items", response_model=list[OpportunityResponse])
+def read_opportunities(opportunity_job_id: UUID, db: Session = Depends(get_db)) -> list[OpportunityResponse]:
+    opportunity_job = crud.get_opportunity_job(db, opportunity_job_id)
+    if opportunity_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Opportunity job not found")
+    return crud.list_opportunities(db, opportunity_job_id)
 
 
 @app.post(
