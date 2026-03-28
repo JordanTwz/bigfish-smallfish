@@ -75,6 +75,56 @@ When the job is done, the response includes:
 curl http://localhost:8000/research-jobs/<job_id>/sources
 ```
 
+## Opportunities
+
+Create ranked next-best actions from a completed research job:
+
+```bash
+curl -X POST http://localhost:8000/research-jobs/<job_id>/opportunities
+```
+
+Poll the opportunity job:
+
+```bash
+curl http://localhost:8000/opportunity-jobs/<opportunity_job_id>
+```
+
+Fetch the ranked items:
+
+```bash
+curl http://localhost:8000/opportunity-jobs/<opportunity_job_id>/items
+```
+
+These can include content ideas, profile updates, public engagement opportunities, and contribution ideas.
+
+## Monitoring
+
+Capture a baseline snapshot for a target:
+
+```bash
+curl -X POST http://localhost:8000/research-jobs/<job_id>/monitor \
+  -H "Content-Type: application/json" \
+  -d '{"cadence":"manual"}'
+```
+
+Check the monitor job:
+
+```bash
+curl http://localhost:8000/monitor-jobs/<monitor_job_id>
+```
+
+Run a refresh:
+
+```bash
+curl -X POST http://localhost:8000/monitor-jobs/<monitor_job_id>/refresh
+```
+
+Fetch detected changes:
+
+```bash
+curl http://localhost:8000/monitor-jobs/<monitor_job_id>/events
+```
+
 ## Blog Drafts
 
 Create reviewable blog drafts from a completed research job:
