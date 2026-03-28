@@ -4,6 +4,8 @@ export type ResearchJobCreate = {
   company_domain: string | null;
   role_title: string | null;
   search_context: string | null;
+  client_name: string | null;
+  client_profile: Record<string, unknown> | null;
 };
 
 export type ResearchJobResponse = {
@@ -14,6 +16,8 @@ export type ResearchJobResponse = {
   company_domain: string | null;
   role_title: string | null;
   search_context: string | null;
+  client_name: string | null;
+  client_profile_jsonb: Record<string, unknown> | null;
   final_brief_jsonb: Record<string, unknown> | null;
   error_jsonb: Record<string, unknown> | null;
   created_at: string;

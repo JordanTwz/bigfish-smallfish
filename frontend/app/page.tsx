@@ -57,8 +57,10 @@ const researchActiveStatuses = new Set(["queued", "discovering", "extracting", "
 const asyncActiveStatuses = new Set(["queued", "ranking", "profiling", "outlining", "drafting", "checking"]);
 const researchTerminalStatuses = new Set(["completed", "partial", "failed"]);
 const workspaceTabs = ["overview", "research", "opportunities", "monitoring", "blog", "persona"] as const;
+const appModes = ["operations", "profiles"] as const;
 
 type WorkspaceTab = (typeof workspaceTabs)[number];
+type AppMode = (typeof appModes)[number];
 type BackendHealth = "checking" | "healthy" | "unreachable";
 type ActionKey =
   | "researchRefresh"
@@ -71,12 +73,41 @@ type ActionKey =
   | "personaRefresh";
 
 type MissionComposerState = {
-  clientName: string;
+  selectedProfileId: string;
   candidateName: string;
   companyName: string;
   companyDomain: string;
   roleTitle: string;
   searchContext: string;
+};
+
+type ClientProfile = {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  name: string;
+  company: string;
+  roleTitle: string;
+  summary: string;
+  interestsText: string;
+  strengthsText: string;
+  goalsText: string;
+  proofPointsText: string;
+  constraintsText: string;
+  profileNotes: string;
+};
+
+type ClientProfileFormState = {
+  name: string;
+  company: string;
+  roleTitle: string;
+  summary: string;
+  interestsText: string;
+  strengthsText: string;
+  goalsText: string;
+  proofPointsText: string;
+  constraintsText: string;
+  profileNotes: string;
 };
 
 type DraftFormState = {
@@ -102,7 +133,9 @@ type RunFormState = {
 type Workspace = {
   id: string;
   createdAt: string;
+  clientProfileId: string | null;
   clientName: string;
+  clientProfileJson: Record<string, unknown> | null;
   candidateName: string;
   companyName: string;
   companyDomain: string;
@@ -131,13 +164,15 @@ type Workspace = {
 };
 
 type PersistedState = {
+  clientProfiles: ClientProfile[];
   workspaces: Workspace[];
   activeWorkspaceId: string | null;
   activeTab: WorkspaceTab;
+  appMode: AppMode;
 };
 
 const initialComposer: MissionComposerState = {
-  clientName: "Northstar Ventures",
+  selectedProfileId: "",
   candidateName: "Jane Doe",
   companyName: "ExampleCo",
   companyDomain: "example.com",
@@ -145,18 +180,38 @@ const initialComposer: MissionComposerState = {
   searchContext: "Technical screen for a backend or platform role.",
 };
 
+const initialClientProfileForm: ClientProfileFormState = {
+  name: "Northstar Ventures",
+  company: "Northstar Ventures",
+  roleTitle: "Platform advisory partner",
+  summary: "Hands-on technical advisor with a public point of view in platform engineering and AI operations.",
+  interestsText: "platform engineering, AI operations, observability",
+  strengthsText: "systems thinking, technical writing, engineering leadership",
+  goalsText: "build credibility with senior engineering leaders, publish thoughtful public writing",
+  proofPointsText: "led platform migrations, scaled developer tooling, writes architecture reviews",
+  constraintsText: "avoid hype, avoid generic thought leadership, stay grounded in direct experience",
+  profileNotes: "Prefers practical, operator-focused angles with explicit tradeoff analysis.",
+};
+
 const defaultMonitorForm: MonitorFormState = {
   cadence: "manual",
 };
 
-const defaultDraftForm = (clientName: string): DraftFormState => ({
+const defaultDraftForm = (clientName: string, clientProfileJson: Record<string, unknown> | null): DraftFormState => ({
   goal: "resonance",
   draftCount: "3",
   targetLength: "medium",
   styleConstraints: "Technical, specific, and evidence-led.",
   personaConstraints: "Do not imitate or impersonate the target.",
   clientName,
-  clientProfileText: '{\n  "current_role": "Engineering leader",\n  "interests": ["platform engineering", "AI operations"]\n}',
+  clientProfileText: JSON.stringify(
+    clientProfileJson ?? {
+      current_role: "Engineering leader",
+      interests: ["platform engineering", "AI operations"],
+    },
+    null,
+    2,
+  ),
   requestedAnglesText: "client_voice, expert_commentary",
 });
 
@@ -169,18 +224,58 @@ function makeWorkspaceId() {
   return `workspace-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function makeClientProfileId() {
+  return `client-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 function normalizeNullable(value: string) {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function normalizeResearchPayload(form: MissionComposerState): ResearchJobCreate {
+function normalizeResearchPayload(
+  form: MissionComposerState,
+  clientProfile: ClientProfile | null,
+): ResearchJobCreate {
   return {
     candidate_name: form.candidateName.trim(),
     company_name: normalizeNullable(form.companyName),
     company_domain: normalizeNullable(form.companyDomain),
     role_title: normalizeNullable(form.roleTitle),
     search_context: normalizeNullable(form.searchContext),
+    client_name: clientProfile?.name ? normalizeNullable(clientProfile.name) : null,
+    client_profile: clientProfile ? buildClientProfileJson(clientProfile) : null,
+  };
+}
+
+function parseCommaList(value: string) {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function buildClientProfileJson(profile: ClientProfile | ClientProfileFormState) {
+  return {
+    company: normalizeNullable(profile.company),
+    current_role: normalizeNullable(profile.roleTitle),
+    summary: normalizeNullable(profile.summary),
+    interests: parseCommaList(profile.interestsText),
+    strengths: parseCommaList(profile.strengthsText),
+    goals: parseCommaList(profile.goalsText),
+    proof_points: parseCommaList(profile.proofPointsText),
+    constraints: parseCommaList(profile.constraintsText),
+    notes: normalizeNullable(profile.profileNotes),
+  } as Record<string, unknown>;
+}
+
+function createClientProfile(form: ClientProfileFormState): ClientProfile {
+  const now = new Date().toISOString();
+  return {
+    id: makeClientProfileId(),
+    createdAt: now,
+    updatedAt: now,
+    ...form,
   };
 }
 
@@ -213,11 +308,18 @@ function buildDraftPayload(form: DraftFormState): BlogDraftJobCreate {
   };
 }
 
-function createWorkspaceShell(form: MissionComposerState, researchJob: ResearchJobResponse): Workspace {
+function createWorkspaceShell(
+  form: MissionComposerState,
+  researchJob: ResearchJobResponse,
+  clientProfile: ClientProfile,
+): Workspace {
+  const clientProfileJson = buildClientProfileJson(clientProfile);
   return {
     id: makeWorkspaceId(),
     createdAt: new Date().toISOString(),
-    clientName: form.clientName.trim() || "Unnamed client",
+    clientProfileId: clientProfile.id,
+    clientName: clientProfile.name.trim() || "Unnamed client",
+    clientProfileJson,
     candidateName: form.candidateName.trim(),
     companyName: form.companyName.trim(),
     companyDomain: form.companyDomain.trim(),
@@ -232,12 +334,12 @@ function createWorkspaceShell(form: MissionComposerState, researchJob: ResearchJ
     monitorJobId: null,
     monitorJob: null,
     monitorEvents: [],
-    blogDraftForm: defaultDraftForm(form.clientName.trim() || "Unnamed client"),
+    blogDraftForm: defaultDraftForm(clientProfile.name.trim() || "Unnamed client", clientProfileJson),
     blogDraftJobId: null,
     blogDraftJob: null,
     blogDrafts: [],
     personaForm: {
-      ...defaultDraftForm(form.clientName.trim() || "Unnamed client"),
+      ...defaultDraftForm(clientProfile.name.trim() || "Unnamed client", clientProfileJson),
       goal: "credibility",
       draftCount: "2",
     },
@@ -271,6 +373,11 @@ function asRecord(value: unknown) {
 
 function getDiscoveryInsights(job: ResearchJobResponse | null) {
   return asRecord(asRecord(job?.final_brief_jsonb)?.discovery_insights);
+}
+
+function getClientProfileSummary(profile: Record<string, unknown> | null) {
+  const summary = profile?.summary;
+  return typeof summary === "string" && summary.trim() ? summary : null;
 }
 
 function getResearchSummaryStatus(workspace: Workspace) {
@@ -323,14 +430,22 @@ function deriveWorkspaceSignal(workspace: Workspace) {
   return "neutral";
 }
 
-function toPersistedState(workspaces: Workspace[], activeWorkspaceId: string | null, activeTab: WorkspaceTab): PersistedState {
+function toPersistedState(
+  clientProfiles: ClientProfile[],
+  workspaces: Workspace[],
+  activeWorkspaceId: string | null,
+  activeTab: WorkspaceTab,
+  appMode: AppMode,
+): PersistedState {
   return {
+    clientProfiles,
     workspaces: workspaces.map((workspace) => ({
       ...workspace,
       actions: {},
     })),
     activeWorkspaceId,
     activeTab,
+    appMode,
   };
 }
 
@@ -345,14 +460,18 @@ function parsePersistedState(raw: string | null): PersistedState | null {
       return null;
     }
     return {
+      clientProfiles: Array.isArray(parsed.clientProfiles) ? parsed.clientProfiles : [],
       workspaces: parsed.workspaces.map((workspace) => ({
         ...workspace,
+        clientProfileId: workspace.clientProfileId ?? null,
+        clientProfileJson: workspace.clientProfileJson ?? null,
         actions: {},
-        blogDraftForm: workspace.blogDraftForm ?? defaultDraftForm(workspace.clientName),
+        blogDraftForm:
+          workspace.blogDraftForm ?? defaultDraftForm(workspace.clientName, workspace.clientProfileJson ?? null),
         personaForm:
           workspace.personaForm ??
           ({
-            ...defaultDraftForm(workspace.clientName),
+            ...defaultDraftForm(workspace.clientName, workspace.clientProfileJson ?? null),
             goal: "credibility",
             draftCount: "2",
           } as DraftFormState),
@@ -361,6 +480,7 @@ function parsePersistedState(raw: string | null): PersistedState | null {
       })),
       activeWorkspaceId: parsed.activeWorkspaceId ?? null,
       activeTab: parsed.activeTab ?? "overview",
+      appMode: parsed.appMode ?? "operations",
     };
   } catch {
     return null;
@@ -428,6 +548,10 @@ function SectionCard({
 }
 
 export default function Home() {
+  const [appMode, setAppMode] = useState<AppMode>("operations");
+  const [clientProfiles, setClientProfiles] = useState<ClientProfile[]>([]);
+  const [clientProfileForm, setClientProfileForm] = useState<ClientProfileFormState>(initialClientProfileForm);
+  const [editingClientProfileId, setEditingClientProfileId] = useState<string | null>(null);
   const [composer, setComposer] = useState<MissionComposerState>(initialComposer);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
@@ -442,6 +566,11 @@ export default function Home() {
   const [runForm, setRunForm] = useState<RunFormState>(initialRunForm);
   const [runError, setRunError] = useState<string | null>(null);
   const [runSubmitting, setRunSubmitting] = useState(false);
+
+  const selectedClientProfile = useMemo(
+    () => clientProfiles.find((profile) => profile.id === composer.selectedProfileId) ?? null,
+    [clientProfiles, composer.selectedProfileId],
+  );
 
   const activeWorkspace = useMemo(
     () => workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null,
@@ -513,6 +642,8 @@ export default function Home() {
         ]);
         nextState.researchJob = researchJob;
         nextState.sources = sources;
+        nextState.clientName = researchJob.client_name ?? workspace.clientName;
+        nextState.clientProfileJson = researchJob.client_profile_jsonb ?? workspace.clientProfileJson;
       }
 
       if (workspace.opportunityJobId) {
@@ -584,12 +715,37 @@ export default function Home() {
   useEffect(() => {
     const stored = parsePersistedState(window.localStorage.getItem(STORAGE_KEY));
     if (stored) {
+      setClientProfiles(
+        stored.clientProfiles.length > 0
+          ? stored.clientProfiles
+          : [createClientProfile(initialClientProfileForm)],
+      );
       setWorkspaces(stored.workspaces);
       setActiveWorkspaceId(stored.activeWorkspaceId ?? stored.workspaces[0]?.id ?? null);
       setActiveTab(stored.activeTab);
+      setAppMode(stored.appMode);
+    } else {
+      const seedProfile = createClientProfile(initialClientProfileForm);
+      setClientProfiles([seedProfile]);
+      setComposer((current) => ({
+        ...current,
+        selectedProfileId: seedProfile.id,
+      }));
     }
     setIsBootstrapped(true);
   }, []);
+
+  useEffect(() => {
+    if (!clientProfiles.length) {
+      return;
+    }
+    if (!composer.selectedProfileId || !clientProfiles.some((profile) => profile.id === composer.selectedProfileId)) {
+      setComposer((current) => ({
+        ...current,
+        selectedProfileId: clientProfiles[0].id,
+      }));
+    }
+  }, [clientProfiles, composer.selectedProfileId]);
 
   useEffect(() => {
     if (!isBootstrapped) {
@@ -598,9 +754,9 @@ export default function Home() {
 
     window.localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify(toPersistedState(workspaces, activeWorkspaceId, activeTab)),
+      JSON.stringify(toPersistedState(clientProfiles, workspaces, activeWorkspaceId, activeTab, appMode)),
     );
-  }, [activeTab, activeWorkspaceId, isBootstrapped, workspaces]);
+  }, [activeTab, activeWorkspaceId, appMode, clientProfiles, isBootstrapped, workspaces]);
 
   useEffect(() => {
     if (!isBootstrapped || hasHydratedPersistedWorkspaces) {
@@ -630,13 +786,17 @@ export default function Home() {
     setLaunchingWorkspace(true);
 
     try {
-      const payload = normalizeResearchPayload(composer);
+      if (!selectedClientProfile) {
+        throw new Error("Select a client profile before launching a workspace.");
+      }
+
+      const payload = normalizeResearchPayload(composer, selectedClientProfile);
       if (!payload.candidate_name) {
         throw new Error("Candidate name is required.");
       }
 
       const researchJob = await createResearchJob(payload);
-      const workspace = createWorkspaceShell(composer, researchJob);
+      const workspace = createWorkspaceShell(composer, researchJob, selectedClientProfile);
       setWorkspaces((current) => [workspace, ...current]);
       startTransition(() => {
         setActiveWorkspaceId(workspace.id);
@@ -862,6 +1022,75 @@ export default function Home() {
     }
   }
 
+  function handleSaveClientProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!clientProfileForm.name.trim()) {
+      window.alert("Client profile name is required.");
+      return;
+    }
+
+    if (editingClientProfileId) {
+      setClientProfiles((current) =>
+        current.map((profile) =>
+          profile.id === editingClientProfileId
+            ? {
+                ...profile,
+                ...clientProfileForm,
+                updatedAt: new Date().toISOString(),
+              }
+            : profile,
+        ),
+      );
+    } else {
+      const created = createClientProfile(clientProfileForm);
+      setClientProfiles((current) => [created, ...current]);
+      setComposer((current) => ({
+        ...current,
+        selectedProfileId: created.id,
+      }));
+    }
+
+    setEditingClientProfileId(null);
+    setClientProfileForm(initialClientProfileForm);
+    setAppMode("operations");
+  }
+
+  function handleEditClientProfile(profile: ClientProfile) {
+    setEditingClientProfileId(profile.id);
+    setClientProfileForm({
+      name: profile.name,
+      company: profile.company,
+      roleTitle: profile.roleTitle,
+      summary: profile.summary,
+      interestsText: profile.interestsText,
+      strengthsText: profile.strengthsText,
+      goalsText: profile.goalsText,
+      proofPointsText: profile.proofPointsText,
+      constraintsText: profile.constraintsText,
+      profileNotes: profile.profileNotes,
+    });
+    setAppMode("profiles");
+  }
+
+  function handleDeleteClientProfile(profileId: string) {
+    if (clientProfiles.length <= 1) {
+      window.alert("At least one client profile must remain in the registry.");
+      return;
+    }
+    setClientProfiles((current) => current.filter((profile) => profile.id !== profileId));
+    if (composer.selectedProfileId === profileId) {
+      setComposer((current) => ({
+        ...current,
+        selectedProfileId: "",
+      }));
+    }
+    if (editingClientProfileId === profileId) {
+      setEditingClientProfileId(null);
+      setClientProfileForm(initialClientProfileForm);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.16),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(34,197,94,0.09),_transparent_22%),linear-gradient(180deg,_#06101f_0%,_#081423_36%,_#0b1524_100%)] text-[var(--text)]">
       <div className="mx-auto flex min-h-screen w-full max-w-[1760px] flex-col gap-6 px-4 py-5 sm:px-6 xl:px-8">
@@ -901,6 +1130,24 @@ export default function Home() {
           </div>
         </header>
 
+        <div className="flex flex-wrap gap-3">
+          {appModes.map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setAppMode(mode)}
+              className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition ${
+                appMode === mode
+                  ? "border-cyan-400/40 bg-cyan-400/12 text-cyan-100"
+                  : "border-[var(--line)] bg-[var(--panel-2)] text-[var(--muted-strong)] hover:border-[var(--line-strong)]"
+              }`}
+            >
+              {mode}
+            </button>
+          ))}
+        </div>
+
+        {appMode === "operations" ? (
         <div className="grid flex-1 gap-6 xl:grid-cols-[340px_minmax(0,1fr)_340px]">
           <aside className="space-y-6">
             <SectionCard
@@ -908,11 +1155,34 @@ export default function Home() {
               subtitle="Launch a fresh client-target workspace. Each workspace persists locally and polls its own backend jobs."
             >
               <form className="space-y-4" onSubmit={handleLaunchWorkspace}>
-                <Input
-                  label="Client"
-                  value={composer.clientName}
-                  onChange={(value) => setComposer((current) => ({ ...current, clientName: value }))}
+                <Select
+                  label="Client profile"
+                  value={composer.selectedProfileId}
+                  onChange={(value) => setComposer((current) => ({ ...current, selectedProfileId: value }))}
+                  options={clientProfiles.map((profile) => ({
+                    value: profile.id,
+                    label: profile.name,
+                  }))}
                 />
+                {selectedClientProfile ? (
+                  <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] px-4 py-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+                      Selected profile
+                    </p>
+                    <h3 className="mt-2 text-base font-semibold text-white">{selectedClientProfile.name}</h3>
+                    <p className="mt-2 text-sm text-[var(--muted-strong)]">
+                      {selectedClientProfile.roleTitle}
+                      {selectedClientProfile.company ? ` · ${selectedClientProfile.company}` : ""}
+                    </p>
+                    <p className="mt-3 text-sm leading-7 text-[var(--muted-strong)]">
+                      {selectedClientProfile.summary}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-[var(--line-strong)] bg-[var(--panel-2)] px-4 py-4 text-sm leading-7 text-[var(--muted-strong)]">
+                    Create a client profile in the Profiles tab, then select it here before launching work.
+                  </div>
+                )}
                 <Input
                   label="Target"
                   value={composer.candidateName}
@@ -943,7 +1213,7 @@ export default function Home() {
                 />
                 <button
                   type="submit"
-                  disabled={launchingWorkspace}
+                  disabled={launchingWorkspace || !selectedClientProfile}
                   className="w-full rounded-2xl border border-cyan-400/40 bg-cyan-400/12 px-4 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/18 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {launchingWorkspace ? "Launching..." : "Launch Research Workspace"}
@@ -1037,6 +1307,11 @@ export default function Home() {
                       <p className="mt-4 max-w-3xl text-sm leading-7 text-[var(--muted-strong)]">
                         {activeWorkspace.searchContext || "No additional search context supplied."}
                       </p>
+                      {getClientProfileSummary(activeWorkspace.clientProfileJson) ? (
+                        <p className="mt-4 max-w-3xl text-sm leading-7 text-[var(--muted-strong)]">
+                          Client profile context: {getClientProfileSummary(activeWorkspace.clientProfileJson)}
+                        </p>
+                      ) : null}
                       <div className="mt-5 flex flex-wrap gap-2">
                         <StatusPill label={`job ${activeWorkspace.researchJobId?.slice(0, 8) ?? "pending"}`} tone="active" />
                         <StatusPill label={`${activeWorkspace.sources.length} sources`} tone="neutral" />
@@ -1547,6 +1822,157 @@ export default function Home() {
             </SectionCard>
           </aside>
         </div>
+        ) : (
+          <div className="grid flex-1 gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
+            <SectionCard
+              title="Client Profiles"
+              subtitle="Create reusable client identities so every research run, opportunity set, and draft can be tailored from the same source of truth."
+            >
+              <form className="space-y-4" onSubmit={handleSaveClientProfile}>
+                <Input
+                  label="Profile name"
+                  value={clientProfileForm.name}
+                  onChange={(value) => setClientProfileForm((current) => ({ ...current, name: value }))}
+                />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Input
+                    label="Company"
+                    value={clientProfileForm.company}
+                    onChange={(value) => setClientProfileForm((current) => ({ ...current, company: value }))}
+                  />
+                  <Input
+                    label="Role"
+                    value={clientProfileForm.roleTitle}
+                    onChange={(value) => setClientProfileForm((current) => ({ ...current, roleTitle: value }))}
+                  />
+                </div>
+                <TextArea
+                  label="Summary"
+                  rows={4}
+                  value={clientProfileForm.summary}
+                  onChange={(value) => setClientProfileForm((current) => ({ ...current, summary: value }))}
+                />
+                <TextArea
+                  label="Interests"
+                  rows={3}
+                  value={clientProfileForm.interestsText}
+                  onChange={(value) => setClientProfileForm((current) => ({ ...current, interestsText: value }))}
+                />
+                <TextArea
+                  label="Strengths"
+                  rows={3}
+                  value={clientProfileForm.strengthsText}
+                  onChange={(value) => setClientProfileForm((current) => ({ ...current, strengthsText: value }))}
+                />
+                <TextArea
+                  label="Goals"
+                  rows={3}
+                  value={clientProfileForm.goalsText}
+                  onChange={(value) => setClientProfileForm((current) => ({ ...current, goalsText: value }))}
+                />
+                <TextArea
+                  label="Proof points"
+                  rows={3}
+                  value={clientProfileForm.proofPointsText}
+                  onChange={(value) => setClientProfileForm((current) => ({ ...current, proofPointsText: value }))}
+                />
+                <TextArea
+                  label="Constraints"
+                  rows={3}
+                  value={clientProfileForm.constraintsText}
+                  onChange={(value) => setClientProfileForm((current) => ({ ...current, constraintsText: value }))}
+                />
+                <TextArea
+                  label="Operator notes"
+                  rows={4}
+                  value={clientProfileForm.profileNotes}
+                  onChange={(value) => setClientProfileForm((current) => ({ ...current, profileNotes: value }))}
+                />
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="submit"
+                    className="rounded-2xl border border-cyan-400/40 bg-cyan-400/12 px-4 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/18"
+                  >
+                    {editingClientProfileId ? "Update Profile" : "Create Profile"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingClientProfileId(null);
+                      setClientProfileForm(initialClientProfileForm);
+                    }}
+                    className="rounded-2xl border border-[var(--line-strong)] bg-[var(--panel-2)] px-4 py-3 text-sm font-semibold text-[var(--muted-strong)] transition hover:border-cyan-400/35 hover:text-white"
+                  >
+                    Reset
+                  </button>
+                </div>
+              </form>
+            </SectionCard>
+
+            <div className="space-y-6">
+              <SectionCard
+                title="Profile Registry"
+                subtitle="Pick the profile to use in Operations, or edit the source profile directly here."
+                action={<StatusPill label={`${clientProfiles.length} profiles`} tone="active" />}
+              >
+                <div className="space-y-4">
+                  {clientProfiles.map((profile) => (
+                    <article key={profile.id} className="rounded-3xl border border-[var(--line)] bg-[var(--panel-2)] p-5">
+                      <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+                            {profile.company || "Client profile"}
+                          </p>
+                          <h2 className="mt-2 text-xl font-semibold text-white">{profile.name}</h2>
+                          <p className="mt-2 text-sm text-[var(--muted-strong)]">{profile.roleTitle}</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {composer.selectedProfileId === profile.id ? <StatusPill label="selected" tone="good" /> : null}
+                          <StatusPill label={`updated ${formatDate(profile.updatedAt)}`} tone="neutral" />
+                        </div>
+                      </div>
+                      <p className="mt-4 text-sm leading-7 text-[var(--muted-strong)]">{profile.summary}</p>
+                      <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                        <JsonBlock title="Structured Profile" value={buildClientProfileJson(profile)} />
+                        <div className="space-y-3">
+                          <MiniDatum label="Interests" value={profile.interestsText || "n/a"} />
+                          <MiniDatum label="Strengths" value={profile.strengthsText || "n/a"} />
+                          <MiniDatum label="Goals" value={profile.goalsText || "n/a"} />
+                        </div>
+                      </div>
+                      <div className="mt-4 flex flex-wrap gap-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setComposer((current) => ({ ...current, selectedProfileId: profile.id }));
+                            setAppMode("operations");
+                          }}
+                          className="rounded-2xl border border-emerald-400/35 bg-emerald-400/10 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-400/16"
+                        >
+                          Use In Operations
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleEditClientProfile(profile)}
+                          className="rounded-2xl border border-[var(--line-strong)] bg-[var(--panel-2)] px-4 py-2 text-sm font-semibold text-[var(--muted-strong)] transition hover:border-cyan-400/35 hover:text-white"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteClientProfile(profile.id)}
+                          className="rounded-2xl border border-rose-400/35 bg-rose-400/10 px-4 py-2 text-sm font-semibold text-rose-100 transition hover:bg-rose-400/16"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </SectionCard>
+            </div>
+          </div>
+        )}
       </div>
     </main>
   );
@@ -1740,6 +2166,38 @@ function Input({
         onChange={(event) => onChange(event.target.value)}
         className="w-full rounded-2xl border border-[var(--line)] bg-[var(--panel-3)] px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-400/40"
       />
+    </label>
+  );
+}
+
+function Select({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ value: string; label: string }>;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+        {label}
+      </span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full rounded-2xl border border-[var(--line)] bg-[var(--panel-3)] px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-400/40"
+      >
+        <option value="">Select a profile</option>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
     </label>
   );
 }
