@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     app_name: str = "Big Fish Small Fish API"
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/bigfish_smallfish"
     cors_origins: list[str] = ["http://localhost:3000"]
+    cors_origin_regex: str = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
     tinyfish_api_key: str | None = None
     tinyfish_base_url: str = "https://agent.tinyfish.ai/v1"
     tinyfish_discovery_concurrency: int = 3

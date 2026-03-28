@@ -38,6 +38,9 @@ docker compose up -d --build --force-recreate api
 
 The API runs at `http://localhost:8000`.
 
+By default, the backend accepts browser requests from localhost frontends on any port, including
+`http://localhost:3000`, `http://localhost:3001`, and `http://127.0.0.1:3000`.
+
 ## Health Check
 
 ```bash
