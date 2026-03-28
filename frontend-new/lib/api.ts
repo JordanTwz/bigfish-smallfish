@@ -1,7 +1,9 @@
 import type {
+  BlogDraftPublishResponse,
   BlogDraftJobCreate,
   BlogDraftJobResponse,
   BlogDraftResponse,
+  HealthResponse,
   MonitorEventResponse,
   MonitorJobCreate,
   MonitorJobResponse,
@@ -41,6 +43,14 @@ export function getApiBaseUrl() {
   return API_BASE_URL;
 }
 
+export function getHealth() {
+  return request<HealthResponse>("/health");
+}
+
+export function listResearchJobs() {
+  return request<ResearchJobResponse[]>("/research-jobs");
+}
+
 export function createResearchJob(payload: ResearchJobCreate) {
   return request<ResearchJobResponse>("/research-jobs", {
     method: "POST",
@@ -54,6 +64,18 @@ export function getResearchJob(jobId: string) {
 
 export function listResearchSources(jobId: string) {
   return request<SourceCandidateResponse[]>(`/research-jobs/${jobId}/sources`);
+}
+
+export function listResearchOpportunityJobs(jobId: string) {
+  return request<OpportunityJobResponse[]>(`/research-jobs/${jobId}/opportunity-jobs`);
+}
+
+export function listResearchMonitorJobs(jobId: string) {
+  return request<MonitorJobResponse[]>(`/research-jobs/${jobId}/monitor-jobs`);
+}
+
+export function listResearchBlogDraftJobs(jobId: string) {
+  return request<BlogDraftJobResponse[]>(`/research-jobs/${jobId}/blog-draft-jobs`);
 }
 
 export function refreshResearchJob(jobId: string) {
@@ -110,6 +132,16 @@ export function getBlogDraftJob(jobId: string) {
 
 export function listBlogDrafts(jobId: string) {
   return request<BlogDraftResponse[]>(`/blog-draft-jobs/${jobId}/drafts`);
+}
+
+export function getLatestBlogDraft() {
+  return request<BlogDraftResponse>("/blog-drafts/latest");
+}
+
+export function publishLatestBlogDraft() {
+  return request<BlogDraftPublishResponse>("/blog-drafts/latest/publish", {
+    method: "POST",
+  });
 }
 
 export function refreshBlogDraftJob(jobId: string) {

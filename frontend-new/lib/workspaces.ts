@@ -32,12 +32,15 @@ export type WorkspaceSummary = {
   researchJobId: string | null;
   researchJob: ResearchJobResponse | null;
   sources: SourceCandidateResponse[];
+  opportunityJobsHistory: OpportunityJobResponse[];
   opportunityJobId: string | null;
   opportunityJob: OpportunityJobResponse | null;
   opportunities: OpportunityResponse[];
+  monitorJobsHistory: MonitorJobResponse[];
   monitorJobId: string | null;
   monitorJob: MonitorJobResponse | null;
   monitorEvents: MonitorEventResponse[];
+  draftJobsHistory: BlogDraftJobResponse[];
   blogJobId: string | null;
   blogJob: BlogDraftJobResponse | null;
   blogDrafts: BlogDraftResponse[];

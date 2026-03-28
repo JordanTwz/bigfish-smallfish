@@ -3,7 +3,14 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import type { BlogDraftResponse, MonitorEventResponse, OpportunityResponse, SourceCandidateResponse } from "@/lib/types";
+import { publishLatestBlogDraft } from "@/lib/api";
+import type {
+  BlogDraftPublishResponse,
+  BlogDraftResponse,
+  MonitorEventResponse,
+  OpportunityResponse,
+  SourceCandidateResponse,
+} from "@/lib/types";
 import { buildDraftPayload } from "@/lib/workspace-builders";
 import {
   defaultDraftForm,
@@ -42,6 +49,9 @@ export function WorkspacePage({
   const workspace = getWorkspace(workspaceId);
   const [blogForm, setBlogForm] = useState<DraftForm>(defaultDraftForm);
   const [personaForm, setPersonaForm] = useState<DraftForm>(defaultDraftForm);
+  const [publishResult, setPublishResult] = useState<BlogDraftPublishResponse | null>(null);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState(false);
 
   useEffect(() => {
     if (!ready) {
@@ -211,6 +221,10 @@ export function WorkspacePage({
               <p className="text-sm leading-7 text-[var(--muted)]">
                 This route turns research evidence into ranked content, profile, contribution, and engagement moves.
               </p>
+              <div className="mt-5 rounded-[22px] border border-[var(--line)] bg-white/55 px-4 py-4 text-sm text-[var(--muted)]">
+                {workspace.opportunityJobsHistory.length} opportunity job
+                {workspace.opportunityJobsHistory.length === 1 ? "" : "s"} recorded for this target.
+              </div>
               <div className="mt-6 grid gap-3">
                 <MetricCard label="Job status" value={workspace.opportunityJob?.status ?? "idle"} detail={formatDate(workspace.opportunityJob?.updated_at)} />
                 <MetricCard label="Generated" value={String(workspace.opportunities.length)} detail="Stored opportunity rows" />
@@ -255,6 +269,10 @@ export function WorkspacePage({
                 <KeyValue label="Cadence" value={workspace.monitorJob?.cadence ?? "manual"} />
                 <KeyValue label="Last checked" value={formatDate(workspace.monitorJob?.last_checked_at)} />
               </div>
+              <div className="mt-5 rounded-[22px] border border-[var(--line)] bg-white/55 px-4 py-4 text-sm text-[var(--muted)]">
+                {workspace.monitorJobsHistory.length} monitor job
+                {workspace.monitorJobsHistory.length === 1 ? "" : "s"} recorded for this target.
+              </div>
               <p className="mt-5 text-sm leading-7 text-[var(--muted)]">
                 Monitor refresh re-runs target research, diffs the new snapshot against the stored baseline, and records new sources, themes, or angles as monitor events.
               </p>
@@ -275,6 +293,26 @@ export function WorkspacePage({
                 kicker="Long form"
                 aside={
                   <div className="flex gap-2">
+                    <Button
+                      disabled={!workspace.blogDrafts.length || publishing}
+                      onClick={async () => {
+                        setPublishError(null);
+                        setPublishResult(null);
+                        setPublishing(true);
+                        try {
+                          const result = await publishLatestBlogDraft();
+                          setPublishResult(result);
+                        } catch (error) {
+                          setPublishError(error instanceof Error ? error.message : "Failed to publish latest blog draft");
+                        } finally {
+                          setPublishing(false);
+                        }
+                      }}
+                      type="button"
+                      variant="soft"
+                    >
+                      {publishing ? "Publishing..." : "Publish Latest to Mataroa"}
+                    </Button>
                     <Button
                       disabled={!workspace.blogJobId || pendingAction === "refresh-blog"}
                       onClick={() => void refreshBlogRun(workspaceId)}
@@ -304,6 +342,21 @@ export function WorkspacePage({
                     {blogJobError}
                   </div>
                 ) : null}
+                {publishError ? (
+                  <div className="mb-5 rounded-[20px] border border-[rgba(142,61,49,0.2)] bg-[rgba(142,61,49,0.08)] px-4 py-3 text-sm leading-6 text-[var(--danger)]">
+                    {publishError}
+                  </div>
+                ) : null}
+                {publishResult ? (
+                  <div className="mb-5 rounded-[20px] border border-[rgba(47,106,79,0.2)] bg-[rgba(47,106,79,0.08)] px-4 py-3 text-sm leading-6 text-[var(--success)]">
+                    Publish status: {publishResult.status}
+                    {publishResult.published_url ? ` · ${publishResult.published_url}` : ""}
+                  </div>
+                ) : null}
+                <div className="mb-5 rounded-[22px] border border-[var(--line)] bg-white/55 px-4 py-4 text-sm text-[var(--muted)]">
+                  {workspace.draftJobsHistory.length} draft job
+                  {workspace.draftJobsHistory.length === 1 ? "" : "s"} recorded for this target.
+                </div>
                 <DraftControls form={blogForm} setForm={setBlogForm} />
                 <div className="mt-6 grid gap-3">
                   {workspace.blogDrafts.length ? workspace.blogDrafts.map((draft) => <DraftCard key={draft.id} item={draft} />) : <EmptyState message="No blog drafts yet. Create a draft job after research completes." />}

@@ -25,6 +25,10 @@ export type ResearchJobResponse = {
   finished_at: string | null;
 };
 
+export type HealthResponse = {
+  status: string;
+};
+
 export type SourceCandidateResponse = {
   id: string;
   research_job_id: string;
@@ -148,4 +152,13 @@ export type BlogDraftResponse = {
   quality_jsonb: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
+};
+
+export type BlogDraftPublishResponse = {
+  draft: BlogDraftResponse;
+  tinyfish_run_id: string;
+  status: string;
+  published_url: string | null;
+  result_jsonb: Record<string, unknown> | null;
+  error_jsonb: Record<string, unknown> | null;
 };
