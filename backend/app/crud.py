@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 from app.models import (
     BlogDraft,
     BlogDraftJob,
+    MonitorEvent,
+    MonitorJob,
     Opportunity,
     OpportunityJob,
     ResearchJob,
@@ -14,7 +16,7 @@ from app.models import (
     SourceCandidate,
     TinyfishRun,
 )
-from app.schemas import BlogDraftJobCreate, ResearchJobCreate, RunCreate
+from app.schemas import BlogDraftJobCreate, MonitorJobCreate, ResearchJobCreate, RunCreate
 
 
 def create_run(db: Session, payload: RunCreate) -> Run:
@@ -329,3 +331,84 @@ def create_opportunity(
     db.commit()
     db.refresh(opportunity)
     return opportunity
+
+
+def create_monitor_job(db: Session, research_job: ResearchJob, payload: MonitorJobCreate, snapshot_jsonb: dict) -> MonitorJob:
+    monitor_job = MonitorJob(
+        research_job_id=research_job.id,
+        cadence=payload.cadence,
+        snapshot_jsonb=snapshot_jsonb,
+        summary_jsonb={"message": "Baseline snapshot captured"},
+    )
+    db.add(monitor_job)
+    db.commit()
+    db.refresh(monitor_job)
+    return monitor_job
+
+
+def get_monitor_job(db: Session, monitor_job_id: UUID) -> MonitorJob | None:
+    return db.get(MonitorJob, monitor_job_id)
+
+
+def list_monitor_events(db: Session, monitor_job_id: UUID) -> list[MonitorEvent]:
+    stmt = select(MonitorEvent).where(MonitorEvent.monitor_job_id == monitor_job_id)
+    return list(db.scalars(stmt.order_by(MonitorEvent.created_at.desc())))
+
+
+def update_monitor_job(
+    db: Session,
+    monitor_job: MonitorJob,
+    *,
+    status: str | None = None,
+    active: bool | None = None,
+    snapshot_jsonb: dict | None = None,
+    summary_jsonb: dict | None = None,
+    error_jsonb: dict | None = None,
+    last_checked_at: datetime | None = None,
+    next_check_at: datetime | None = None,
+) -> MonitorJob:
+    if status is not None:
+        monitor_job.status = status
+    if active is not None:
+        monitor_job.active = active
+    if snapshot_jsonb is not None:
+        monitor_job.snapshot_jsonb = snapshot_jsonb
+    if summary_jsonb is not None:
+        monitor_job.summary_jsonb = summary_jsonb
+    if error_jsonb is not None:
+        monitor_job.error_jsonb = error_jsonb
+    if last_checked_at is not None:
+        monitor_job.last_checked_at = last_checked_at
+    if next_check_at is not None:
+        monitor_job.next_check_at = next_check_at
+    monitor_job.updated_at = datetime.now(timezone.utc)
+    db.add(monitor_job)
+    db.commit()
+    db.refresh(monitor_job)
+    return monitor_job
+
+
+def create_monitor_event(
+    db: Session,
+    *,
+    monitor_job_id: UUID,
+    event_type: str,
+    source_url: str | None,
+    change_summary: str,
+    confidence: float | None,
+    recommended_followup: str | None,
+    payload_jsonb: dict | None,
+) -> MonitorEvent:
+    event = MonitorEvent(
+        monitor_job_id=monitor_job_id,
+        event_type=event_type,
+        source_url=source_url,
+        change_summary=change_summary,
+        confidence=confidence,
+        recommended_followup=recommended_followup,
+        payload_jsonb=payload_jsonb,
+    )
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+    return event

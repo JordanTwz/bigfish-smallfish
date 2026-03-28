@@ -153,3 +153,37 @@ class OpportunityResponse(BaseModel):
     priority_score: float | None
     created_at: datetime
 
+
+class MonitorJobCreate(BaseModel):
+    cadence: str = "manual"
+
+
+class MonitorJobResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    research_job_id: UUID
+    status: str
+    cadence: str
+    active: bool
+    snapshot_jsonb: dict[str, Any] | None
+    summary_jsonb: dict[str, Any] | None
+    error_jsonb: dict[str, Any] | None
+    last_checked_at: datetime | None
+    next_check_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class MonitorEventResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    monitor_job_id: UUID
+    event_type: str
+    source_url: str | None
+    change_summary: str
+    confidence: float | None
+    recommended_followup: str | None
+    payload_jsonb: dict[str, Any] | None
+    created_at: datetime

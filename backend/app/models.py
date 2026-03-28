@@ -60,6 +60,9 @@ class ResearchJob(Base):
     opportunity_jobs: Mapped[list["OpportunityJob"]] = relationship(
         back_populates="research_job", cascade="all, delete-orphan"
     )
+    monitor_jobs: Mapped[list["MonitorJob"]] = relationship(
+        back_populates="research_job", cascade="all, delete-orphan"
+    )
 
 
 class SourceCandidate(Base):
@@ -224,3 +227,51 @@ class Opportunity(Base):
     )
 
     opportunity_job: Mapped["OpportunityJob"] = relationship(back_populates="items")
+
+
+class MonitorJob(Base):
+    __tablename__ = "monitor_jobs"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    research_job_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("research_jobs.id", ondelete="CASCADE"), index=True
+    )
+    status: Mapped[str] = mapped_column(String(64), index=True, default="active")
+    cadence: Mapped[str] = mapped_column(String(64), default="manual")
+    active: Mapped[bool] = mapped_column(default=True)
+    snapshot_jsonb: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    summary_jsonb: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    error_jsonb: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_check_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    research_job: Mapped["ResearchJob"] = relationship(back_populates="monitor_jobs")
+    events: Mapped[list["MonitorEvent"]] = relationship(
+        back_populates="monitor_job", cascade="all, delete-orphan"
+    )
+
+
+class MonitorEvent(Base):
+    __tablename__ = "monitor_events"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    monitor_job_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("monitor_jobs.id", ondelete="CASCADE"), index=True
+    )
+    event_type: Mapped[str] = mapped_column(String(64), index=True)
+    source_url: Mapped[str | None] = mapped_column(String(2048))
+    change_summary: Mapped[str] = mapped_column(String(4096))
+    confidence: Mapped[float | None] = mapped_column(Float)
+    recommended_followup: Mapped[str | None] = mapped_column(String(2048))
+    payload_jsonb: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+
+    monitor_job: Mapped["MonitorJob"] = relationship(back_populates="events")
