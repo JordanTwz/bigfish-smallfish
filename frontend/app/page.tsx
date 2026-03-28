@@ -57,10 +57,8 @@ const researchActiveStatuses = new Set(["queued", "discovering", "extracting", "
 const asyncActiveStatuses = new Set(["queued", "ranking", "profiling", "outlining", "drafting", "checking"]);
 const researchTerminalStatuses = new Set(["completed", "partial", "failed"]);
 const workspaceTabs = ["overview", "research", "opportunities", "monitoring", "blog", "persona"] as const;
-const appModes = ["operations", "profiles"] as const;
 
 type WorkspaceTab = (typeof workspaceTabs)[number];
-type AppMode = (typeof appModes)[number];
 type BackendHealth = "checking" | "healthy" | "unreachable";
 type ActionKey =
   | "researchRefresh"
@@ -168,7 +166,6 @@ type PersistedState = {
   workspaces: Workspace[];
   activeWorkspaceId: string | null;
   activeTab: WorkspaceTab;
-  appMode: AppMode;
 };
 
 const initialComposer: MissionComposerState = {
@@ -435,7 +432,6 @@ function toPersistedState(
   workspaces: Workspace[],
   activeWorkspaceId: string | null,
   activeTab: WorkspaceTab,
-  appMode: AppMode,
 ): PersistedState {
   return {
     clientProfiles,
@@ -445,7 +441,6 @@ function toPersistedState(
     })),
     activeWorkspaceId,
     activeTab,
-    appMode,
   };
 }
 
@@ -480,7 +475,6 @@ function parsePersistedState(raw: string | null): PersistedState | null {
       })),
       activeWorkspaceId: parsed.activeWorkspaceId ?? null,
       activeTab: parsed.activeTab ?? "overview",
-      appMode: parsed.appMode ?? "operations",
     };
   } catch {
     return null;
@@ -548,10 +542,11 @@ function SectionCard({
 }
 
 export default function Home() {
-  const [appMode, setAppMode] = useState<AppMode>("operations");
   const [clientProfiles, setClientProfiles] = useState<ClientProfile[]>([]);
   const [clientProfileForm, setClientProfileForm] = useState<ClientProfileFormState>(initialClientProfileForm);
   const [editingClientProfileId, setEditingClientProfileId] = useState<string | null>(null);
+  const [showClientManager, setShowClientManager] = useState(false);
+  const [showNewTargetForm, setShowNewTargetForm] = useState(false);
   const [composer, setComposer] = useState<MissionComposerState>(initialComposer);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
@@ -577,14 +572,22 @@ export default function Home() {
     [workspaces, activeWorkspaceId],
   );
 
+  const clientTargets = useMemo(() => {
+    if (!composer.selectedProfileId) {
+      return [];
+    }
+
+    return workspaces.filter((workspace) => workspace.clientProfileId === composer.selectedProfileId);
+  }, [composer.selectedProfileId, workspaces]);
+
   const filteredWorkspaces = useMemo(() => {
     const query = deferredWorkspaceQuery.trim().toLowerCase();
     if (!query) {
-      return workspaces;
+      return clientTargets;
     }
 
-    return workspaces.filter((workspace) => describeWorkspace(workspace).toLowerCase().includes(query));
-  }, [deferredWorkspaceQuery, workspaces]);
+    return clientTargets.filter((workspace) => describeWorkspace(workspace).toLowerCase().includes(query));
+  }, [clientTargets, deferredWorkspaceQuery]);
 
   const globalCounts = useMemo(
     () => ({
@@ -723,7 +726,6 @@ export default function Home() {
       setWorkspaces(stored.workspaces);
       setActiveWorkspaceId(stored.activeWorkspaceId ?? stored.workspaces[0]?.id ?? null);
       setActiveTab(stored.activeTab);
-      setAppMode(stored.appMode);
     } else {
       const seedProfile = createClientProfile(initialClientProfileForm);
       setClientProfiles([seedProfile]);
@@ -748,15 +750,33 @@ export default function Home() {
   }, [clientProfiles, composer.selectedProfileId]);
 
   useEffect(() => {
+    if (!composer.selectedProfileId) {
+      setActiveWorkspaceId(null);
+      return;
+    }
+
+    const activeWorkspaceStillVisible = workspaces.some(
+      (workspace) => workspace.id === activeWorkspaceId && workspace.clientProfileId === composer.selectedProfileId,
+    );
+
+    if (!activeWorkspaceStillVisible) {
+      const nextWorkspace = workspaces.find(
+        (workspace) => workspace.clientProfileId === composer.selectedProfileId,
+      );
+      setActiveWorkspaceId(nextWorkspace?.id ?? null);
+    }
+  }, [activeWorkspaceId, composer.selectedProfileId, workspaces]);
+
+  useEffect(() => {
     if (!isBootstrapped) {
       return;
     }
 
     window.localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify(toPersistedState(clientProfiles, workspaces, activeWorkspaceId, activeTab, appMode)),
+      JSON.stringify(toPersistedState(clientProfiles, workspaces, activeWorkspaceId, activeTab)),
     );
-  }, [activeTab, activeWorkspaceId, appMode, clientProfiles, isBootstrapped, workspaces]);
+  }, [activeTab, activeWorkspaceId, clientProfiles, isBootstrapped, workspaces]);
 
   useEffect(() => {
     if (!isBootstrapped || hasHydratedPersistedWorkspaces) {
@@ -1053,7 +1073,7 @@ export default function Home() {
 
     setEditingClientProfileId(null);
     setClientProfileForm(initialClientProfileForm);
-    setAppMode("operations");
+    setShowClientManager(false);
   }
 
   function handleEditClientProfile(profile: ClientProfile) {
@@ -1070,7 +1090,7 @@ export default function Home() {
       constraintsText: profile.constraintsText,
       profileNotes: profile.profileNotes,
     });
-    setAppMode("profiles");
+    setShowClientManager(true);
   }
 
   function handleDeleteClientProfile(profileId: string) {
@@ -1095,8 +1115,53 @@ export default function Home() {
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.16),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(34,197,94,0.09),_transparent_22%),linear-gradient(180deg,_#06101f_0%,_#081423_36%,_#0b1524_100%)] text-[var(--text)]">
       <div className="mx-auto flex min-h-screen w-full max-w-[1760px] flex-col gap-6 px-4 py-5 sm:px-6 xl:px-8">
         <header className="rounded-[32px] border border-[var(--line)] bg-[linear-gradient(135deg,rgba(9,19,33,0.98),rgba(7,15,27,0.9))] px-6 py-5 shadow-[0_28px_120px_rgba(2,6,23,0.48)]">
-          <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-            <div>
+          <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+              <div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="min-w-[260px]">
+                    <Select
+                      label="Client"
+                      value={composer.selectedProfileId}
+                      onChange={(value) => setComposer((current) => ({ ...current, selectedProfileId: value }))}
+                      options={clientProfiles.map((profile) => ({
+                        value: profile.id,
+                        label: profile.name,
+                      }))}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingClientProfileId(null);
+                      setClientProfileForm(initialClientProfileForm);
+                      setShowClientManager((current) => !current);
+                    }}
+                    className="mt-6 rounded-2xl border border-cyan-400/40 bg-cyan-400/12 px-4 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/18"
+                  >
+                    {showClientManager ? "Close Client Panel" : "Add New Client"}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                {selectedClientProfile ? (
+                  <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] px-4 py-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+                      Active client
+                    </p>
+                    <h2 className="mt-2 text-lg font-semibold text-white">{selectedClientProfile.name}</h2>
+                    <p className="mt-2 text-sm text-[var(--muted-strong)]">
+                      {selectedClientProfile.roleTitle}
+                      {selectedClientProfile.company ? ` · ${selectedClientProfile.company}` : ""}
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+              <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--muted)]">
                 Big Fish / Small Fish
               </p>
@@ -1109,125 +1174,84 @@ export default function Home() {
               </p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] px-4 py-3">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">Workspaces</p>
-                <p className="mt-2 text-2xl font-semibold text-white">{globalCounts.total}</p>
-              </div>
-              <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] px-4 py-3">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">Live research</p>
-                <p className="mt-2 text-2xl font-semibold text-white">{globalCounts.activeResearch}</p>
-              </div>
-              <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] px-4 py-3">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">Monitors</p>
-                <p className="mt-2 text-2xl font-semibold text-white">{globalCounts.monitored}</p>
-              </div>
-              <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] px-4 py-3">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">Draft jobs</p>
-                <p className="mt-2 text-2xl font-semibold text-white">{globalCounts.drafting}</p>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] px-4 py-3">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">Workspaces</p>
+                  <p className="mt-2 text-2xl font-semibold text-white">{globalCounts.total}</p>
+                </div>
+                <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] px-4 py-3">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">Selected client targets</p>
+                  <p className="mt-2 text-2xl font-semibold text-white">{clientTargets.length}</p>
+                </div>
+                <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] px-4 py-3">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">Live research</p>
+                  <p className="mt-2 text-2xl font-semibold text-white">{globalCounts.activeResearch}</p>
+                </div>
+                <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] px-4 py-3">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">Draft jobs</p>
+                  <p className="mt-2 text-2xl font-semibold text-white">{globalCounts.drafting}</p>
+                </div>
               </div>
             </div>
           </div>
         </header>
 
-        <div className="flex flex-wrap gap-3">
-          {appModes.map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => setAppMode(mode)}
-              className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition ${
-                appMode === mode
-                  ? "border-cyan-400/40 bg-cyan-400/12 text-cyan-100"
-                  : "border-[var(--line)] bg-[var(--panel-2)] text-[var(--muted-strong)] hover:border-[var(--line-strong)]"
-              }`}
-            >
-              {mode}
-            </button>
-          ))}
-        </div>
-
-        {appMode === "operations" ? (
-        <div className="grid flex-1 gap-6 xl:grid-cols-[340px_minmax(0,1fr)_340px]">
+        <div className="grid flex-1 gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
           <aside className="space-y-6">
             <SectionCard
-              title="New Mission"
-              subtitle="Launch a fresh client-target workspace. Each workspace persists locally and polls its own backend jobs."
-            >
-              <form className="space-y-4" onSubmit={handleLaunchWorkspace}>
-                <Select
-                  label="Client profile"
-                  value={composer.selectedProfileId}
-                  onChange={(value) => setComposer((current) => ({ ...current, selectedProfileId: value }))}
-                  options={clientProfiles.map((profile) => ({
-                    value: profile.id,
-                    label: profile.name,
-                  }))}
-                />
-                {selectedClientProfile ? (
-                  <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] px-4 py-4">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
-                      Selected profile
-                    </p>
-                    <h3 className="mt-2 text-base font-semibold text-white">{selectedClientProfile.name}</h3>
-                    <p className="mt-2 text-sm text-[var(--muted-strong)]">
-                      {selectedClientProfile.roleTitle}
-                      {selectedClientProfile.company ? ` · ${selectedClientProfile.company}` : ""}
-                    </p>
-                    <p className="mt-3 text-sm leading-7 text-[var(--muted-strong)]">
-                      {selectedClientProfile.summary}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-[var(--line-strong)] bg-[var(--panel-2)] px-4 py-4 text-sm leading-7 text-[var(--muted-strong)]">
-                    Create a client profile in the Profiles tab, then select it here before launching work.
-                  </div>
-                )}
-                <Input
-                  label="Target"
-                  value={composer.candidateName}
-                  onChange={(value) => setComposer((current) => ({ ...current, candidateName: value }))}
-                />
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Input
-                    label="Company"
-                    value={composer.companyName}
-                    onChange={(value) => setComposer((current) => ({ ...current, companyName: value }))}
-                  />
-                  <Input
-                    label="Domain"
-                    value={composer.companyDomain}
-                    onChange={(value) => setComposer((current) => ({ ...current, companyDomain: value }))}
-                  />
-                </div>
-                <Input
-                  label="Role"
-                  value={composer.roleTitle}
-                  onChange={(value) => setComposer((current) => ({ ...current, roleTitle: value }))}
-                />
-                <TextArea
-                  label="Search context"
-                  rows={4}
-                  value={composer.searchContext}
-                  onChange={(value) => setComposer((current) => ({ ...current, searchContext: value }))}
-                />
+              title="Targets"
+              subtitle="Every target belongs to the selected client profile."
+              action={
                 <button
-                  type="submit"
-                  disabled={launchingWorkspace || !selectedClientProfile}
-                  className="w-full rounded-2xl border border-cyan-400/40 bg-cyan-400/12 px-4 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/18 disabled:cursor-not-allowed disabled:opacity-50"
+                  type="button"
+                  onClick={() => setShowNewTargetForm((current) => !current)}
+                  className="rounded-2xl border border-cyan-400/40 bg-cyan-400/12 px-4 py-2 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/18"
                 >
-                  {launchingWorkspace ? "Launching..." : "Launch Research Workspace"}
+                  {showNewTargetForm ? "Close" : "New Target"}
                 </button>
-              </form>
-            </SectionCard>
-
-            <SectionCard
-              title="Workspace Registry"
-              subtitle="Filter and switch between simultaneous client-target missions."
-              action={<StatusPill label={`${filteredWorkspaces.length} visible`} tone="active" />}
+              }
             >
               <div className="space-y-4">
-                <Input label="Filter" value={workspaceQuery} onChange={setWorkspaceQuery} />
+                <Input label="Filter targets" value={workspaceQuery} onChange={setWorkspaceQuery} />
+                {showNewTargetForm ? (
+                  <form className="space-y-4 rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] p-4" onSubmit={handleLaunchWorkspace}>
+                    <Input
+                      label="Target"
+                      value={composer.candidateName}
+                      onChange={(value) => setComposer((current) => ({ ...current, candidateName: value }))}
+                    />
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Input
+                        label="Company"
+                        value={composer.companyName}
+                        onChange={(value) => setComposer((current) => ({ ...current, companyName: value }))}
+                      />
+                      <Input
+                        label="Domain"
+                        value={composer.companyDomain}
+                        onChange={(value) => setComposer((current) => ({ ...current, companyDomain: value }))}
+                      />
+                    </div>
+                    <Input
+                      label="Role"
+                      value={composer.roleTitle}
+                      onChange={(value) => setComposer((current) => ({ ...current, roleTitle: value }))}
+                    />
+                    <TextArea
+                      label="Search context"
+                      rows={4}
+                      value={composer.searchContext}
+                      onChange={(value) => setComposer((current) => ({ ...current, searchContext: value }))}
+                    />
+                    <button
+                      type="submit"
+                      disabled={launchingWorkspace || !selectedClientProfile}
+                      className="w-full rounded-2xl border border-cyan-400/40 bg-cyan-400/12 px-4 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/18 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {launchingWorkspace ? "Creating target..." : "Create Target"}
+                    </button>
+                  </form>
+                ) : null}
                 <div className="space-y-3">
                   {filteredWorkspaces.length > 0 ? (
                     filteredWorkspaces.map((workspace) => (
@@ -1247,10 +1271,7 @@ export default function Home() {
                       >
                         <div className="flex items-start justify-between gap-4">
                           <div>
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
-                              {workspace.clientName}
-                            </p>
-                            <h2 className="mt-2 text-base font-semibold text-white">{workspace.candidateName}</h2>
+                            <h2 className="text-base font-semibold text-white">{workspace.candidateName}</h2>
                             <p className="mt-1 text-sm text-[var(--muted-strong)]">
                               {workspace.companyName || "Independent"} {workspace.roleTitle ? `· ${workspace.roleTitle}` : ""}
                             </p>
@@ -1270,7 +1291,9 @@ export default function Home() {
                     ))
                   ) : (
                     <div className="rounded-2xl border border-dashed border-[var(--line-strong)] bg-[var(--panel-2)] px-4 py-5 text-sm leading-7 text-[var(--muted-strong)]">
-                      No workspaces match the current filter.
+                      {selectedClientProfile
+                        ? "No targets yet for this client. Create one from the panel above."
+                        : "Create or select a client profile first."}
                     </div>
                   )}
                 </div>
@@ -1279,10 +1302,144 @@ export default function Home() {
           </aside>
 
           <section className="space-y-6">
+            {showClientManager ? (
+              <SectionCard
+                title={editingClientProfileId ? "Edit Client" : "New Client"}
+                subtitle="Reusable client profile data now feeds research, opportunities, monitoring, and drafting."
+              >
+                <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
+                  <form className="space-y-4" onSubmit={handleSaveClientProfile}>
+                    <Input
+                      label="Profile name"
+                      value={clientProfileForm.name}
+                      onChange={(value) => setClientProfileForm((current) => ({ ...current, name: value }))}
+                    />
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Input
+                        label="Company"
+                        value={clientProfileForm.company}
+                        onChange={(value) => setClientProfileForm((current) => ({ ...current, company: value }))}
+                      />
+                      <Input
+                        label="Role"
+                        value={clientProfileForm.roleTitle}
+                        onChange={(value) => setClientProfileForm((current) => ({ ...current, roleTitle: value }))}
+                      />
+                    </div>
+                    <TextArea
+                      label="Summary"
+                      rows={4}
+                      value={clientProfileForm.summary}
+                      onChange={(value) => setClientProfileForm((current) => ({ ...current, summary: value }))}
+                    />
+                    <TextArea
+                      label="Interests"
+                      rows={3}
+                      value={clientProfileForm.interestsText}
+                      onChange={(value) => setClientProfileForm((current) => ({ ...current, interestsText: value }))}
+                    />
+                    <TextArea
+                      label="Strengths"
+                      rows={3}
+                      value={clientProfileForm.strengthsText}
+                      onChange={(value) => setClientProfileForm((current) => ({ ...current, strengthsText: value }))}
+                    />
+                    <TextArea
+                      label="Goals"
+                      rows={3}
+                      value={clientProfileForm.goalsText}
+                      onChange={(value) => setClientProfileForm((current) => ({ ...current, goalsText: value }))}
+                    />
+                    <TextArea
+                      label="Proof points"
+                      rows={3}
+                      value={clientProfileForm.proofPointsText}
+                      onChange={(value) => setClientProfileForm((current) => ({ ...current, proofPointsText: value }))}
+                    />
+                    <TextArea
+                      label="Constraints"
+                      rows={3}
+                      value={clientProfileForm.constraintsText}
+                      onChange={(value) => setClientProfileForm((current) => ({ ...current, constraintsText: value }))}
+                    />
+                    <TextArea
+                      label="Operator notes"
+                      rows={4}
+                      value={clientProfileForm.profileNotes}
+                      onChange={(value) => setClientProfileForm((current) => ({ ...current, profileNotes: value }))}
+                    />
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        type="submit"
+                        className="rounded-2xl border border-cyan-400/40 bg-cyan-400/12 px-4 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/18"
+                      >
+                        {editingClientProfileId ? "Update Client" : "Create Client"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingClientProfileId(null);
+                          setClientProfileForm(initialClientProfileForm);
+                          setShowClientManager(false);
+                        }}
+                        className="rounded-2xl border border-[var(--line-strong)] bg-[var(--panel-2)] px-4 py-3 text-sm font-semibold text-[var(--muted-strong)] transition hover:border-cyan-400/35 hover:text-white"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </form>
+
+                  <div className="space-y-4">
+                    {clientProfiles.map((profile) => (
+                      <article key={profile.id} className="rounded-3xl border border-[var(--line)] bg-[var(--panel-2)] p-5">
+                        <div className="flex flex-wrap items-start justify-between gap-4">
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+                              {profile.company || "Client"}
+                            </p>
+                            <h2 className="mt-2 text-xl font-semibold text-white">{profile.name}</h2>
+                            <p className="mt-2 text-sm text-[var(--muted-strong)]">{profile.roleTitle}</p>
+                          </div>
+                          {composer.selectedProfileId === profile.id ? <StatusPill label="selected" tone="good" /> : null}
+                        </div>
+                        <p className="mt-4 text-sm leading-7 text-[var(--muted-strong)]">{profile.summary}</p>
+                        <div className="mt-4 flex flex-wrap gap-3">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setComposer((current) => ({ ...current, selectedProfileId: profile.id }));
+                              setShowClientManager(false);
+                            }}
+                            className="rounded-2xl border border-emerald-400/35 bg-emerald-400/10 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-400/16"
+                          >
+                            Use Client
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleEditClientProfile(profile)}
+                            className="rounded-2xl border border-[var(--line-strong)] bg-[var(--panel-2)] px-4 py-2 text-sm font-semibold text-[var(--muted-strong)] transition hover:border-cyan-400/35 hover:text-white"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteClientProfile(profile.id)}
+                            className="rounded-2xl border border-rose-400/35 bg-rose-400/10 px-4 py-2 text-sm font-semibold text-rose-100 transition hover:bg-rose-400/16"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              </SectionCard>
+            ) : null}
+
             {activeWorkspace ? (
               <>
                 <SectionCard
-                  title="Active Mission"
+                  title="Target"
                   subtitle={describeWorkspace(activeWorkspace)}
                   action={
                     <div className="flex flex-wrap gap-2">
@@ -1745,58 +1902,63 @@ export default function Home() {
               </>
             ) : (
               <SectionCard
-                title="Workspace Detail"
-                subtitle="Launch or select a mission from the left rail to inspect research and downstream jobs."
+                title="Target Detail"
+                subtitle="Select a target from the left sidebar or create a new one."
               >
-                <EmptyState message="No active workspace selected." />
+                <EmptyState
+                  message={
+                    selectedClientProfile
+                      ? "No target selected for this client."
+                      : "Select a client profile from the top-left dropdown to begin."
+                  }
+                />
               </SectionCard>
             )}
-          </section>
+            <div className="grid gap-6 xl:grid-cols-2">
+              <SectionCard
+                title="Backend Operations"
+                subtitle="Health, API routing, and low-level TinyFish run inspection."
+                action={
+                  <StatusPill
+                    label={health === "healthy" ? "healthy" : health === "checking" ? "checking" : "unreachable"}
+                    tone={health === "healthy" ? "good" : health === "checking" ? "active" : "risk"}
+                  />
+                }
+              >
+                <div className="space-y-4">
+                  <MiniDatum label="API base" value={API_BASE_URL} />
+                  <button
+                    type="button"
+                    onClick={() => void refreshOperations()}
+                    className="w-full rounded-2xl border border-[var(--line-strong)] bg-[var(--panel-2)] px-4 py-3 text-sm font-semibold text-[var(--muted-strong)] transition hover:border-cyan-400/35 hover:text-white"
+                  >
+                    Refresh Backend Telemetry
+                  </button>
+                </div>
+              </SectionCard>
 
-          <aside className="space-y-6">
-            <SectionCard
-              title="Backend Operations"
-              subtitle="Health, API routing, and low-level TinyFish run inspection."
-              action={
-                <StatusPill
-                  label={health === "healthy" ? "healthy" : health === "checking" ? "checking" : "unreachable"}
-                  tone={health === "healthy" ? "good" : health === "checking" ? "active" : "risk"}
-                />
-              }
-            >
-              <div className="space-y-4">
-                <MiniDatum label="API base" value={API_BASE_URL} />
-                <button
-                  type="button"
-                  onClick={() => void refreshOperations()}
-                  className="w-full rounded-2xl border border-[var(--line-strong)] bg-[var(--panel-2)] px-4 py-3 text-sm font-semibold text-[var(--muted-strong)] transition hover:border-cyan-400/35 hover:text-white"
-                >
-                  Refresh Backend Telemetry
-                </button>
-              </div>
-            </SectionCard>
-
-            <SectionCard title="Create Run" subtitle="Expose the backend `/runs` debug endpoint directly from the UI.">
-              <form className="space-y-4" onSubmit={handleCreateRun}>
-                <Input label="Source URL" value={runForm.sourceUrl} onChange={(value) => setRunForm((current) => ({ ...current, sourceUrl: value }))} />
-                <TextArea label="Goal" rows={4} value={runForm.goal} onChange={(value) => setRunForm((current) => ({ ...current, goal: value }))} />
-                <button
-                  type="submit"
-                  disabled={runSubmitting}
-                  className="w-full rounded-2xl border border-cyan-400/35 bg-cyan-400/10 px-4 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/16 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {runSubmitting ? "Submitting..." : "Create Debug Run"}
-                </button>
-                {runError ? (
-                  <div className="rounded-2xl border border-rose-400/30 bg-rose-400/8 px-4 py-3 text-sm text-rose-100">
-                    {runError}
-                  </div>
-                ) : null}
-              </form>
-            </SectionCard>
+              <SectionCard title="Create Run" subtitle="Expose the backend `/runs` debug endpoint directly from the UI.">
+                <form className="space-y-4" onSubmit={handleCreateRun}>
+                  <Input label="Source URL" value={runForm.sourceUrl} onChange={(value) => setRunForm((current) => ({ ...current, sourceUrl: value }))} />
+                  <TextArea label="Goal" rows={4} value={runForm.goal} onChange={(value) => setRunForm((current) => ({ ...current, goal: value }))} />
+                  <button
+                    type="submit"
+                    disabled={runSubmitting}
+                    className="w-full rounded-2xl border border-cyan-400/35 bg-cyan-400/10 px-4 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/16 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {runSubmitting ? "Submitting..." : "Create Debug Run"}
+                  </button>
+                  {runError ? (
+                    <div className="rounded-2xl border border-rose-400/30 bg-rose-400/8 px-4 py-3 text-sm text-rose-100">
+                      {runError}
+                    </div>
+                  ) : null}
+                </form>
+              </SectionCard>
+            </div>
 
             <SectionCard title="Recent Runs" subtitle="Latest responses from `GET /runs`.">
-              <div className="space-y-3">
+              <div className="grid gap-3 xl:grid-cols-2">
                 {runs.length > 0 ? (
                   runs.map((run) => (
                     <article key={run.id} className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] p-4">
@@ -1820,159 +1982,8 @@ export default function Home() {
                 )}
               </div>
             </SectionCard>
-          </aside>
+          </section>
         </div>
-        ) : (
-          <div className="grid flex-1 gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
-            <SectionCard
-              title="Client Profiles"
-              subtitle="Create reusable client identities so every research run, opportunity set, and draft can be tailored from the same source of truth."
-            >
-              <form className="space-y-4" onSubmit={handleSaveClientProfile}>
-                <Input
-                  label="Profile name"
-                  value={clientProfileForm.name}
-                  onChange={(value) => setClientProfileForm((current) => ({ ...current, name: value }))}
-                />
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Input
-                    label="Company"
-                    value={clientProfileForm.company}
-                    onChange={(value) => setClientProfileForm((current) => ({ ...current, company: value }))}
-                  />
-                  <Input
-                    label="Role"
-                    value={clientProfileForm.roleTitle}
-                    onChange={(value) => setClientProfileForm((current) => ({ ...current, roleTitle: value }))}
-                  />
-                </div>
-                <TextArea
-                  label="Summary"
-                  rows={4}
-                  value={clientProfileForm.summary}
-                  onChange={(value) => setClientProfileForm((current) => ({ ...current, summary: value }))}
-                />
-                <TextArea
-                  label="Interests"
-                  rows={3}
-                  value={clientProfileForm.interestsText}
-                  onChange={(value) => setClientProfileForm((current) => ({ ...current, interestsText: value }))}
-                />
-                <TextArea
-                  label="Strengths"
-                  rows={3}
-                  value={clientProfileForm.strengthsText}
-                  onChange={(value) => setClientProfileForm((current) => ({ ...current, strengthsText: value }))}
-                />
-                <TextArea
-                  label="Goals"
-                  rows={3}
-                  value={clientProfileForm.goalsText}
-                  onChange={(value) => setClientProfileForm((current) => ({ ...current, goalsText: value }))}
-                />
-                <TextArea
-                  label="Proof points"
-                  rows={3}
-                  value={clientProfileForm.proofPointsText}
-                  onChange={(value) => setClientProfileForm((current) => ({ ...current, proofPointsText: value }))}
-                />
-                <TextArea
-                  label="Constraints"
-                  rows={3}
-                  value={clientProfileForm.constraintsText}
-                  onChange={(value) => setClientProfileForm((current) => ({ ...current, constraintsText: value }))}
-                />
-                <TextArea
-                  label="Operator notes"
-                  rows={4}
-                  value={clientProfileForm.profileNotes}
-                  onChange={(value) => setClientProfileForm((current) => ({ ...current, profileNotes: value }))}
-                />
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    type="submit"
-                    className="rounded-2xl border border-cyan-400/40 bg-cyan-400/12 px-4 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/18"
-                  >
-                    {editingClientProfileId ? "Update Profile" : "Create Profile"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingClientProfileId(null);
-                      setClientProfileForm(initialClientProfileForm);
-                    }}
-                    className="rounded-2xl border border-[var(--line-strong)] bg-[var(--panel-2)] px-4 py-3 text-sm font-semibold text-[var(--muted-strong)] transition hover:border-cyan-400/35 hover:text-white"
-                  >
-                    Reset
-                  </button>
-                </div>
-              </form>
-            </SectionCard>
-
-            <div className="space-y-6">
-              <SectionCard
-                title="Profile Registry"
-                subtitle="Pick the profile to use in Operations, or edit the source profile directly here."
-                action={<StatusPill label={`${clientProfiles.length} profiles`} tone="active" />}
-              >
-                <div className="space-y-4">
-                  {clientProfiles.map((profile) => (
-                    <article key={profile.id} className="rounded-3xl border border-[var(--line)] bg-[var(--panel-2)] p-5">
-                      <div className="flex flex-wrap items-start justify-between gap-4">
-                        <div>
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
-                            {profile.company || "Client profile"}
-                          </p>
-                          <h2 className="mt-2 text-xl font-semibold text-white">{profile.name}</h2>
-                          <p className="mt-2 text-sm text-[var(--muted-strong)]">{profile.roleTitle}</p>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {composer.selectedProfileId === profile.id ? <StatusPill label="selected" tone="good" /> : null}
-                          <StatusPill label={`updated ${formatDate(profile.updatedAt)}`} tone="neutral" />
-                        </div>
-                      </div>
-                      <p className="mt-4 text-sm leading-7 text-[var(--muted-strong)]">{profile.summary}</p>
-                      <div className="mt-4 grid gap-4 xl:grid-cols-2">
-                        <JsonBlock title="Structured Profile" value={buildClientProfileJson(profile)} />
-                        <div className="space-y-3">
-                          <MiniDatum label="Interests" value={profile.interestsText || "n/a"} />
-                          <MiniDatum label="Strengths" value={profile.strengthsText || "n/a"} />
-                          <MiniDatum label="Goals" value={profile.goalsText || "n/a"} />
-                        </div>
-                      </div>
-                      <div className="mt-4 flex flex-wrap gap-3">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setComposer((current) => ({ ...current, selectedProfileId: profile.id }));
-                            setAppMode("operations");
-                          }}
-                          className="rounded-2xl border border-emerald-400/35 bg-emerald-400/10 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-400/16"
-                        >
-                          Use In Operations
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleEditClientProfile(profile)}
-                          className="rounded-2xl border border-[var(--line-strong)] bg-[var(--panel-2)] px-4 py-2 text-sm font-semibold text-[var(--muted-strong)] transition hover:border-cyan-400/35 hover:text-white"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteClientProfile(profile.id)}
-                          className="rounded-2xl border border-rose-400/35 bg-rose-400/10 px-4 py-2 text-sm font-semibold text-rose-100 transition hover:bg-rose-400/16"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              </SectionCard>
-            </div>
-          </div>
-        )}
       </div>
     </main>
   );
