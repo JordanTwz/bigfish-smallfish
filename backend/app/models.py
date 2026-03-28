@@ -93,7 +93,7 @@ class TinyfishRun(Base):
     status: Mapped[str] = mapped_column(String(64), index=True, default="queued")
     target_url: Mapped[str] = mapped_column(String(2048))
     goal: Mapped[str] = mapped_column(String(4096))
-    browser_profile: Mapped[str] = mapped_column(String(64), default="default")
+    browser_profile: Mapped[str] = mapped_column(String(64), default="lite")
     attempt_number: Mapped[int] = mapped_column(default=1)
     raw_result_jsonb: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     raw_error_jsonb: Mapped[dict[str, Any] | None] = mapped_column(JSONB)

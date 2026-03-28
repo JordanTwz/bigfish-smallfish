@@ -77,7 +77,7 @@ def create_tinyfish_run(
     stage: str,
     target_url: str,
     goal: str,
-    browser_profile: str = "default",
+    browser_profile: str = "lite",
     attempt_number: int = 1,
 ) -> TinyfishRun:
     tinyfish_run = TinyfishRun(

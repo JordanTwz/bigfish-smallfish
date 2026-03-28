@@ -22,7 +22,7 @@ class TinyfishClient:
         *,
         url: str,
         goal: str,
-        browser_profile: str = "default",
+        browser_profile: str = "lite",
         proxy_config: dict | None = None,
     ) -> dict:
         payload: dict = {
@@ -39,7 +39,12 @@ class TinyfishClient:
                 headers=self._headers,
                 json=payload,
             )
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                raise TinyfishError(
+                    f"TinyFish start_run failed with status {response.status_code}: {response.text}"
+                ) from exc
             return response.json()
 
     async def get_run(self, run_id: str) -> dict:
@@ -48,5 +53,10 @@ class TinyfishClient:
                 f"{settings.tinyfish_base_url}/runs/{run_id}",
                 headers=self._headers,
             )
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                raise TinyfishError(
+                    f"TinyFish get_run failed with status {response.status_code}: {response.text}"
+                ) from exc
             return response.json()
