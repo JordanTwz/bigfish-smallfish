@@ -128,3 +128,71 @@ class BlogDraftJobResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     finished_at: datetime | None
+
+
+class OpportunityJobResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    research_job_id: UUID
+    status: str
+    summary_jsonb: dict[str, Any] | None
+    error_jsonb: dict[str, Any] | None
+    created_at: datetime
+    updated_at: datetime
+    finished_at: datetime | None
+
+
+class OpportunityResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    opportunity_job_id: UUID
+    type: str
+    title: str
+    description: str
+    target_url: str | None
+    theme: str | None
+    estimated_impact: float | None
+    estimated_effort: float | None
+    confidence: float | None
+    why_now: str | None
+    supporting_sources_jsonb: list[dict[str, Any]] | None
+    recommended_asset_type: str | None
+    priority_score: float | None
+    created_at: datetime
+
+
+class MonitorJobCreate(BaseModel):
+    cadence: str = "manual"
+
+
+class MonitorJobResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    research_job_id: UUID
+    status: str
+    cadence: str
+    active: bool
+    snapshot_jsonb: dict[str, Any] | None
+    summary_jsonb: dict[str, Any] | None
+    error_jsonb: dict[str, Any] | None
+    last_checked_at: datetime | None
+    next_check_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class MonitorEventResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    monitor_job_id: UUID
+    event_type: str
+    source_url: str | None
+    change_summary: str
+    confidence: float | None
+    recommended_followup: str | None
+    payload_jsonb: dict[str, Any] | None
+    created_at: datetime

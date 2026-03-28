@@ -110,6 +110,7 @@ def build_resonance_profile_prompts(
     goal: str,
     seed_profile: dict,
     evidence_summary: list[dict],
+    discovery_insights: dict | None,
     style_constraints: str | None,
     persona_constraints: str | None,
 ) -> tuple[str, str]:
@@ -133,6 +134,9 @@ Seed profile:
 
 Evidence summary:
 {evidence_summary}
+
+Discovery insights:
+{discovery_insights}
 
 Style constraints:
 {style_constraints}
@@ -163,6 +167,7 @@ def build_blog_draft_prompts(
     target_length: str,
     resonance_profile: dict,
     evidence_summary: list[dict],
+    discovery_insights: dict | None,
     style_constraints: str | None,
     persona_constraints: str | None,
     client_name: str | None,
@@ -194,6 +199,9 @@ Resonance profile:
 Evidence summary:
 {evidence_summary}
 
+Discovery insights:
+{discovery_insights}
+
 Style constraints:
 {style_constraints}
 
@@ -215,6 +223,11 @@ Return JSON with:
       "slug_suggestion": "string",
       "summary": "string",
       "audience_fit_rationale": "string",
+      "discovery_alignment": {{
+        "used_interest_signals": ["string"],
+        "used_content_angles": ["string"],
+        "used_credibility_opportunities": ["string"]
+      }},
       "outline": {{
         "sections": ["string"]
       }},
@@ -237,6 +250,79 @@ Return JSON with:
       }}
     }}
   ]
+}}
+""".strip()
+    return system_prompt, user_prompt
+
+
+def build_discovery_insights_prompts(
+    *,
+    candidate_name: str,
+    company_name: str | None,
+    role_title: str | None,
+    search_context: str | None,
+    seed_profile: dict,
+    evidence_summary: list[dict],
+    heuristic_insights: dict,
+) -> tuple[str, str]:
+    system_prompt = """
+You analyze public-professional evidence about a target and return safe discovery insights.
+Output only valid JSON.
+Only use publicly visible, professionally relevant interests.
+Do not infer private life details, sensitive traits, or non-public personal information.
+Avoid creepy or manipulative recommendations.
+""".strip()
+
+    user_prompt = f"""
+Create safe discovery insights for a backend system.
+
+Target:
+- Name: {candidate_name}
+- Company: {company_name}
+- Role: {role_title}
+- Search context: {search_context}
+
+Seed profile:
+{seed_profile}
+
+Evidence summary:
+{evidence_summary}
+
+Heuristic insights:
+{heuristic_insights}
+
+Return JSON with:
+{{
+  "public_interest_signals": [
+    {{
+      "interest": "string",
+      "evidence_strength": "low | medium | high",
+      "visibility": "public",
+      "safe_use": "string"
+    }}
+  ],
+  "safe_content_angles": [
+    {{
+      "angle": "string",
+      "why_it_resonates": "string"
+    }}
+  ],
+  "engagement_opportunities": [
+    {{
+      "type": "commentary | talk_followup | open_source_engagement | community_participation",
+      "description": "string",
+      "candidate_urls": ["string"]
+    }}
+  ],
+  "contribution_opportunities": [
+    {{
+      "theme": "string",
+      "suggestion": "string"
+    }}
+  ],
+  "credibility_opportunities": ["string"],
+  "guardrails": ["string"],
+  "source_type_distribution": {{}}
 }}
 """.strip()
     return system_prompt, user_prompt
