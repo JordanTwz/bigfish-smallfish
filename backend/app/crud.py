@@ -4,8 +4,8 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import ResearchJob, Run, SourceCandidate, TinyfishRun
-from app.schemas import ResearchJobCreate, RunCreate
+from app.models import BlogDraft, BlogDraftJob, ResearchJob, Run, SourceCandidate, TinyfishRun
+from app.schemas import BlogDraftJobCreate, ResearchJobCreate, RunCreate
 
 
 def create_run(db: Session, payload: RunCreate) -> Run:
@@ -152,3 +152,84 @@ def create_source_candidate(
     db.commit()
     db.refresh(source_candidate)
     return source_candidate
+
+
+def create_blog_draft_job(db: Session, research_job: ResearchJob, payload: BlogDraftJobCreate) -> BlogDraftJob:
+    blog_draft_job = BlogDraftJob(
+        research_job_id=research_job.id,
+        goal=payload.goal,
+        draft_count=payload.draft_count,
+        target_length=payload.target_length,
+        style_constraints=payload.style_constraints,
+        persona_constraints=payload.persona_constraints,
+    )
+    db.add(blog_draft_job)
+    db.commit()
+    db.refresh(blog_draft_job)
+    return blog_draft_job
+
+
+def get_blog_draft_job(db: Session, blog_draft_job_id: UUID) -> BlogDraftJob | None:
+    return db.get(BlogDraftJob, blog_draft_job_id)
+
+
+def list_blog_drafts(db: Session, blog_draft_job_id: UUID) -> list[BlogDraft]:
+    stmt = select(BlogDraft).where(BlogDraft.blog_draft_job_id == blog_draft_job_id)
+    return list(db.scalars(stmt.order_by(BlogDraft.created_at.asc())))
+
+
+def update_blog_draft_job_status(
+    db: Session,
+    blog_draft_job: BlogDraftJob,
+    status: str,
+    *,
+    resonance_profile_jsonb: dict | None = None,
+    error_jsonb: dict | None = None,
+    finished: bool = False,
+) -> BlogDraftJob:
+    blog_draft_job.status = status
+    blog_draft_job.updated_at = datetime.now(timezone.utc)
+    if resonance_profile_jsonb is not None:
+        blog_draft_job.resonance_profile_jsonb = resonance_profile_jsonb
+    if error_jsonb is not None:
+        blog_draft_job.error_jsonb = error_jsonb
+    if finished:
+        blog_draft_job.finished_at = datetime.now(timezone.utc)
+    db.add(blog_draft_job)
+    db.commit()
+    db.refresh(blog_draft_job)
+    return blog_draft_job
+
+
+def create_blog_draft(
+    db: Session,
+    *,
+    blog_draft_job_id: UUID,
+    title: str,
+    slug_suggestion: str | None,
+    summary: str,
+    audience_fit_rationale: str,
+    outline_jsonb: dict,
+    body_markdown: str,
+    key_takeaways_jsonb: list[str] | None,
+    tags_jsonb: list[str] | None,
+    evidence_references_jsonb: list[dict] | None,
+    quality_jsonb: dict | None,
+) -> BlogDraft:
+    blog_draft = BlogDraft(
+        blog_draft_job_id=blog_draft_job_id,
+        title=title,
+        slug_suggestion=slug_suggestion,
+        summary=summary,
+        audience_fit_rationale=audience_fit_rationale,
+        outline_jsonb=outline_jsonb,
+        body_markdown=body_markdown,
+        key_takeaways_jsonb=key_takeaways_jsonb,
+        tags_jsonb=tags_jsonb,
+        evidence_references_jsonb=evidence_references_jsonb,
+        quality_jsonb=quality_jsonb,
+    )
+    db.add(blog_draft)
+    db.commit()
+    db.refresh(blog_draft)
+    return blog_draft

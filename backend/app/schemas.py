@@ -65,3 +65,48 @@ class ResearchJobResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     finished_at: datetime | None
+
+
+class BlogDraftJobCreate(BaseModel):
+    goal: str = "resonance"
+    draft_count: int = 3
+    target_length: str = "medium"
+    style_constraints: str | None = None
+    persona_constraints: str | None = None
+
+
+class BlogDraftResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    blog_draft_job_id: UUID
+    title: str
+    slug_suggestion: str | None
+    summary: str
+    audience_fit_rationale: str
+    outline_jsonb: dict[str, Any]
+    body_markdown: str
+    key_takeaways_jsonb: list[str] | None
+    tags_jsonb: list[str] | None
+    evidence_references_jsonb: list[dict[str, Any]] | None
+    quality_jsonb: dict[str, Any] | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class BlogDraftJobResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    research_job_id: UUID
+    status: str
+    goal: str
+    draft_count: int
+    target_length: str
+    style_constraints: str | None
+    persona_constraints: str | None
+    resonance_profile_jsonb: dict[str, Any] | None
+    error_jsonb: dict[str, Any] | None
+    created_at: datetime
+    updated_at: datetime
+    finished_at: datetime | None
