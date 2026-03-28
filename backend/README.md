@@ -109,7 +109,22 @@ curl http://localhost:8000/research-jobs/<job_id>
 curl http://localhost:8000/research-jobs/<job_id>/sources
 ```
 
-7. Generate resonance-oriented blog drafts:
+7. Inspect the enriched discovery insights in the research job response:
+
+```bash
+curl http://localhost:8000/research-jobs/<job_id>
+```
+
+The `final_brief_jsonb.discovery_insights` block now includes:
+
+- `public_interest_signals`
+- `safe_content_angles`
+- `engagement_opportunities`
+- `contribution_opportunities`
+- `credibility_opportunities`
+- `guardrails`
+
+8. Generate resonance-oriented blog drafts:
 
 ```bash
 curl -X POST http://localhost:8000/research-jobs/<job_id>/blog-drafts \
@@ -123,14 +138,14 @@ curl -X POST http://localhost:8000/research-jobs/<job_id>/blog-drafts \
   }'
 ```
 
-8. Poll the blog draft job and fetch the generated drafts:
+9. Poll the blog draft job and fetch the generated drafts:
 
 ```bash
 curl http://localhost:8000/blog-draft-jobs/<blog_draft_job_id>
 curl http://localhost:8000/blog-draft-jobs/<blog_draft_job_id>/drafts
 ```
 
-9. Generate persona-building posts for the client using the same research job:
+10. Generate persona-building posts for the client using the same research job:
 
 ```bash
 curl -X POST http://localhost:8000/research-jobs/<job_id>/persona-post-jobs \
@@ -151,7 +166,7 @@ curl -X POST http://localhost:8000/research-jobs/<job_id>/persona-post-jobs \
   }'
 ```
 
-10. Poll the persona post job and fetch the drafts:
+11. Poll the persona post job and fetch the drafts:
 
 ```bash
 curl http://localhost:8000/persona-post-jobs/<persona_post_job_id>
@@ -161,6 +176,7 @@ curl http://localhost:8000/persona-post-jobs/<persona_post_job_id>/drafts
 The overall lifecycle is:
 
 - `research-jobs` gather structured evidence about the target with TinyFish
+- `research-jobs.final_brief_jsonb.discovery_insights` surfaces safe public-interest and opportunity analysis
 - `blog-draft-jobs` turn that evidence into reviewable technical article drafts with OpenAI
 - `persona-post-jobs` turn that evidence into client-facing and expert-commentary style persona drafts with OpenAI
 
@@ -310,6 +326,14 @@ Possible non-success states:
 
 - `partial`
 - `failed`
+
+The `GET /research-jobs/<job_id>` response also includes enriched discovery analysis in `final_brief_jsonb.discovery_insights`, including:
+
+- public interest signals inferred from public-professional evidence
+- safe content angles that are relevant without being creepy
+- engagement opportunities for commentary, talk follow-ups, and public technical discussion
+- contribution opportunities tied to the target's visible themes
+- credibility opportunities and guardrails
 
 ## Blog Draft API
 
