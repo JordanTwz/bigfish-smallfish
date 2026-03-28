@@ -101,3 +101,129 @@ If blocked or incomplete, return:
   "partial_results": []
 }}
 """.strip()
+
+
+def build_resonance_profile_prompts(
+    *,
+    candidate_name: str,
+    company_name: str | None,
+    goal: str,
+    seed_profile: dict,
+    evidence_summary: list[dict],
+    style_constraints: str | None,
+    persona_constraints: str | None,
+) -> tuple[str, str]:
+    system_prompt = """
+You create audience resonance profiles for technical blog drafting.
+Output only valid JSON.
+Do not invent personal history or private information.
+Use only the supplied evidence.
+""".strip()
+
+    user_prompt = f"""
+Create a resonance profile for blog drafts intended to resonate with this target.
+
+Target:
+- Name: {candidate_name}
+- Company: {company_name}
+- Goal: {goal}
+
+Seed profile:
+{seed_profile}
+
+Evidence summary:
+{evidence_summary}
+
+Style constraints:
+{style_constraints}
+
+Persona constraints:
+{persona_constraints}
+
+Return JSON with:
+{{
+  "top_themes": ["string"],
+  "preferred_content_formats": ["string"],
+  "tone_preferences": ["string"],
+  "technical_depth": "medium | high",
+  "resonance_signals": ["string"],
+  "avoid": ["string"],
+  "summary": "string"
+}}
+""".strip()
+    return system_prompt, user_prompt
+
+
+def build_blog_draft_prompts(
+    *,
+    candidate_name: str,
+    company_name: str | None,
+    goal: str,
+    draft_count: int,
+    target_length: str,
+    resonance_profile: dict,
+    evidence_summary: list[dict],
+    style_constraints: str | None,
+    persona_constraints: str | None,
+) -> tuple[str, str]:
+    system_prompt = """
+You write reviewable technical blog drafts for a human author.
+Output only valid JSON.
+Do not imitate the target's voice.
+Do not invent credentials, projects, or personal anecdotes.
+Write with technical depth, specificity, and sincere curiosity.
+""".strip()
+
+    user_prompt = f"""
+Generate {draft_count} distinct blog post drafts for a human author who wants to publish thoughtful online writing that would resonate with this target audience.
+
+Audience target:
+- Name: {candidate_name}
+- Company: {company_name}
+- Goal: {goal}
+- Target length: {target_length}
+
+Resonance profile:
+{resonance_profile}
+
+Evidence summary:
+{evidence_summary}
+
+Style constraints:
+{style_constraints}
+
+Persona constraints:
+{persona_constraints}
+
+Return JSON with:
+{{
+  "drafts": [
+    {{
+      "title": "string",
+      "slug_suggestion": "string",
+      "summary": "string",
+      "audience_fit_rationale": "string",
+      "outline": {{
+        "sections": ["string"]
+      }},
+      "body_markdown": "string",
+      "key_takeaways": ["string"],
+      "tags": ["string"],
+      "evidence_references": [
+        {{
+          "source_url": "string",
+          "source_type": "string",
+          "reason": "string"
+        }}
+      ],
+      "quality": {{
+        "depth_score": 0.0,
+        "specificity_score": 0.0,
+        "resonance_fit_score": 0.0,
+        "warning_flags": ["string"]
+      }}
+    }}
+  ]
+}}
+""".strip()
+    return system_prompt, user_prompt
