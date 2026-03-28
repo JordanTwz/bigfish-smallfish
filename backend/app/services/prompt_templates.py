@@ -3,6 +3,14 @@ from urllib.parse import quote_plus
 from app.models import ResearchJob
 
 
+def _format_client_context(job: ResearchJob) -> str:
+    return f"""
+Client context:
+- Client name: {job.client_name}
+- Client profile: {job.client_profile_jsonb}
+""".strip()
+
+
 def build_discovery_targets(job: ResearchJob) -> list[dict[str, str]]:
     company = job.company_name or ""
     domain = job.company_domain or ""
@@ -39,6 +47,8 @@ def build_discovery_goal(job: ResearchJob, search_type: str) -> str:
     return f"""
 Find public professional pages about {job.candidate_name} related to {company}.
 Search focus: {search_type}.
+{_format_client_context(job)}
+Prioritize evidence that would help personalize advice, positioning, and content ideas for this specific client.
 Return JSON:
 {{
   "matches": [
@@ -68,6 +78,8 @@ def build_extraction_goal(job: ResearchJob, page_url: str) -> str:
     company = job.company_name or "the target company"
     return f"""
 Extract public professional information about {job.candidate_name} related to {company} from this page: {page_url}.
+{_format_client_context(job)}
+Favor extracting themes and signals that can help tailor recommendations and drafts to the client context.
 Return JSON:
 {{
   "person": {{
@@ -261,6 +273,8 @@ def build_discovery_insights_prompts(
     company_name: str | None,
     role_title: str | None,
     search_context: str | None,
+    client_name: str | None,
+    client_profile: dict | None,
     seed_profile: dict,
     evidence_summary: list[dict],
     heuristic_insights: dict,
@@ -281,6 +295,10 @@ Target:
 - Company: {company_name}
 - Role: {role_title}
 - Search context: {search_context}
+
+Client context:
+- Client name: {client_name}
+- Client profile: {client_profile}
 
 Seed profile:
 {seed_profile}
@@ -304,7 +322,8 @@ Return JSON with:
   "safe_content_angles": [
     {{
       "angle": "string",
-      "why_it_resonates": "string"
+      "why_it_resonates": "string",
+      "client_fit_note": "string"
     }}
   ],
   "engagement_opportunities": [
@@ -317,7 +336,8 @@ Return JSON with:
   "contribution_opportunities": [
     {{
       "theme": "string",
-      "suggestion": "string"
+      "suggestion": "string",
+      "client_fit_note": "string"
     }}
   ],
   "credibility_opportunities": ["string"],

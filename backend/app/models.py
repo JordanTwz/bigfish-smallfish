@@ -38,6 +38,8 @@ class ResearchJob(Base):
     company_domain: Mapped[str | None] = mapped_column(String(255))
     role_title: Mapped[str | None] = mapped_column(String(255))
     search_context: Mapped[str | None] = mapped_column(String(2048))
+    client_name: Mapped[str | None] = mapped_column(String(255))
+    client_profile_jsonb: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     final_brief_jsonb: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     error_jsonb: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(

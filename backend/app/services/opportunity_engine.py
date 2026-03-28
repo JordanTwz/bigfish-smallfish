@@ -71,6 +71,10 @@ def build_opportunities(
     research_job: ResearchJob, sources: list[SourceCandidate], discovery_insights: dict
 ) -> list[dict]:
     items: list[dict] = []
+    client_name = research_job.client_name or "the client"
+    client_profile = research_job.client_profile_jsonb or {}
+    client_interests = _client_list(client_profile, "interests")
+    client_strengths = _client_list(client_profile, "strengths")
     safe_content_angles = discovery_insights.get("safe_content_angles") or []
     engagement_opportunities = discovery_insights.get("engagement_opportunities") or []
     contribution_opportunities = discovery_insights.get("contribution_opportunities") or []
@@ -83,13 +87,20 @@ def build_opportunities(
             {
                 "type": "content_opportunity",
                 "title": f"Publish a technical angle: {theme}",
-                "description": angle.get("why_it_resonates") or "Turn this theme into a public technical artifact.",
+                "description": _join_non_empty(
+                    [
+                        angle.get("why_it_resonates"),
+                        angle.get("client_fit_note"),
+                        f"Shape the artifact around {client_name}'s real perspective and experience.",
+                    ]
+                )
+                or "Turn this theme into a public technical artifact.",
                 "target_url": None,
                 "theme": theme,
                 "estimated_impact": 0.82,
                 "estimated_effort": 0.55,
                 "confidence": 0.78,
-                "why_now": "This aligns directly with the target's visible public interests.",
+                "why_now": _why_now(client_name, client_interests, theme),
                 "supporting_sources_jsonb": _supporting_sources(top_sources),
                 "recommended_asset_type": "blog_draft",
                 "priority_score": 0.82,
@@ -102,13 +113,19 @@ def build_opportunities(
             {
                 "type": engagement.get("type") or "engagement_opportunity",
                 "title": f"Engage via {engagement.get('type', 'public discussion').replace('_', ' ')}",
-                "description": engagement.get("description") or "Public engagement opportunity derived from the target's ecosystem.",
+                "description": _join_non_empty(
+                    [
+                        engagement.get("description"),
+                        _client_fit_from_lists(client_name, client_interests, client_strengths),
+                    ]
+                )
+                or "Public engagement opportunity derived from the target's ecosystem.",
                 "target_url": urls[0] if urls else None,
                 "theme": _first_theme(discovery_insights),
                 "estimated_impact": 0.74,
                 "estimated_effort": 0.35,
                 "confidence": 0.72,
-                "why_now": "A direct public engagement surface is already visible.",
+                "why_now": f"A direct public engagement surface is already visible, and it can be framed from {client_name}'s genuine point of view.",
                 "supporting_sources_jsonb": [{"url": url} for url in urls[:3]],
                 "recommended_asset_type": "comment_draft",
                 "priority_score": 0.76,
@@ -121,13 +138,19 @@ def build_opportunities(
             {
                 "type": "contribution_opportunity",
                 "title": f"Contribute around {theme}",
-                "description": contribution.get("suggestion") or "Contribute in a public technical surface related to this theme.",
+                "description": _join_non_empty(
+                    [
+                        contribution.get("suggestion"),
+                        contribution.get("client_fit_note"),
+                    ]
+                )
+                or "Contribute in a public technical surface related to this theme.",
                 "target_url": _first_source_url(top_sources),
                 "theme": theme,
                 "estimated_impact": 0.7,
                 "estimated_effort": 0.6,
                 "confidence": 0.68,
-                "why_now": "This theme appears in the current public evidence set.",
+                "why_now": _why_now(client_name, client_interests, theme),
                 "supporting_sources_jsonb": _supporting_sources(top_sources),
                 "recommended_asset_type": "credibility_note",
                 "priority_score": 0.71,
@@ -139,7 +162,7 @@ def build_opportunities(
             {
                 "type": "profile_update_opportunity",
                 "title": "Strengthen visible credibility signals",
-                "description": note,
+                "description": _join_non_empty([note, _client_fit_from_lists(client_name, client_interests, client_strengths)]) or note,
                 "target_url": None,
                 "theme": _first_theme(discovery_insights),
                 "estimated_impact": 0.65,
@@ -185,3 +208,28 @@ def _first_theme(discovery_insights: dict) -> str | None:
 
 def _first_source_url(sources: list[SourceCandidate]) -> str | None:
     return sources[0].url if sources else None
+
+
+def _client_list(profile: dict, key: str) -> list[str]:
+    value = profile.get(key) if isinstance(profile, dict) else None
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _client_fit_from_lists(client_name: str, client_interests: list[str], client_strengths: list[str]) -> str:
+    if client_interests:
+        return f"Anchor the recommendation in {client_name}'s real interests: {', '.join(client_interests[:2])}."
+    if client_strengths:
+        return f"Anchor the recommendation in {client_name}'s strengths: {', '.join(client_strengths[:2])}."
+    return f"Tailor the recommendation to {client_name}'s authentic experience before acting on it."
+
+
+def _why_now(client_name: str, client_interests: list[str], theme: str | None) -> str:
+    if theme and theme in client_interests:
+        return f"This aligns directly with both the target's visible interests and {client_name}'s stated interests."
+    return f"This is supported by the current public evidence set and can be adapted to {client_name}'s authentic positioning."
+
+
+def _join_non_empty(parts: list[str | None]) -> str:
+    return " ".join(part.strip() for part in parts if isinstance(part, str) and part.strip())

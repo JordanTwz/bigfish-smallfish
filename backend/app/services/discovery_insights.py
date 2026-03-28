@@ -21,6 +21,8 @@ def build_discovery_insights(job: ResearchJob, sources: list[SourceCandidate]) -
             company_name=job.company_name,
             role_title=job.role_title,
             search_context=job.search_context,
+            client_name=job.client_name,
+            client_profile=job.client_profile_jsonb,
             seed_profile=seed_profile,
             evidence_summary=evidence_summary,
             heuristic_insights=heuristic_insights,
@@ -61,12 +63,23 @@ def _build_heuristic_insights(job: ResearchJob, sources: list[SourceCandidate]) 
     if not top_themes:
         top_themes = build_seed_profile(job, sources).get("top_themes", [])
 
+    client_profile = job.client_profile_jsonb or {}
+    client_interests = [
+        interest.strip()
+        for interest in client_profile.get("interests", []) if isinstance(interest, str) and interest.strip()
+    ] if isinstance(client_profile, dict) else []
+    client_strengths = [
+        strength.strip()
+        for strength in client_profile.get("strengths", []) if isinstance(strength, str) and strength.strip()
+    ] if isinstance(client_profile, dict) else []
+
     public_interest_signals = [
         {
             "interest": theme,
             "evidence_strength": "high" if count >= 2 else "medium",
             "visibility": "public",
             "safe_use": "Use this as a professional interest signal, not as a personal-life claim.",
+            "client_overlap": theme in client_interests,
         }
         for theme, count in theme_counter.most_common(5)
     ]
@@ -75,6 +88,7 @@ def _build_heuristic_insights(job: ResearchJob, sources: list[SourceCandidate]) 
         {
             "angle": f"What {theme} taught me about building reliable systems",
             "why_it_resonates": f"Matches the target's visible interest in {theme}.",
+            "client_fit_note": _client_fit_note(theme, client_interests, client_strengths),
         }
         for theme in top_themes[:3]
     ]
@@ -109,6 +123,7 @@ def _build_heuristic_insights(job: ResearchJob, sources: list[SourceCandidate]) 
         {
             "theme": theme,
             "suggestion": f"Contribute code comments, issue analysis, or technical notes in public spaces related to {theme}.",
+            "client_fit_note": _client_fit_note(theme, client_interests, client_strengths),
         }
         for theme in top_themes[:3]
     ]
@@ -135,4 +150,19 @@ def _build_heuristic_insights(job: ResearchJob, sources: list[SourceCandidate]) 
         "credibility_opportunities": credibility_opportunities,
         "guardrails": guardrails,
         "source_type_distribution": dict(source_type_counter),
+        "client_alignment_summary": {
+            "client_name": job.client_name,
+            "known_interests": client_interests,
+            "known_strengths": client_strengths,
+        },
     }
+
+
+def _client_fit_note(theme: str, client_interests: list[str], client_strengths: list[str]) -> str:
+    if theme in client_interests:
+        return f"This theme already overlaps with the client's stated interests in {theme}."
+    if client_strengths:
+        return f"Connect this theme to one of the client's strengths: {', '.join(client_strengths[:2])}."
+    if client_interests:
+        return f"Bridge this theme to adjacent client interests such as {', '.join(client_interests[:2])}."
+    return "Tailor the angle to the client's real experience before publishing."

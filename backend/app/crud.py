@@ -42,6 +42,8 @@ def create_research_job(db: Session, payload: ResearchJobCreate) -> ResearchJob:
         company_domain=payload.company_domain,
         role_title=payload.role_title,
         search_context=payload.search_context,
+        client_name=payload.client_name,
+        client_profile_jsonb=payload.client_profile,
     )
     db.add(research_job)
     db.commit()
@@ -173,8 +175,8 @@ def create_blog_draft_job(db: Session, research_job: ResearchJob, payload: BlogD
         target_length=payload.target_length,
         style_constraints=payload.style_constraints,
         persona_constraints=payload.persona_constraints,
-        client_name=payload.client_name,
-        client_profile_jsonb=payload.client_profile,
+        client_name=payload.client_name or research_job.client_name,
+        client_profile_jsonb=payload.client_profile or research_job.client_profile_jsonb,
         requested_angles_jsonb=payload.requested_angles or ["client_voice", "expert_commentary"],
     )
     db.add(blog_draft_job)

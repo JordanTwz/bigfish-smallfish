@@ -31,6 +31,8 @@ class ResearchJobCreate(BaseModel):
     company_domain: str | None = None
     role_title: str | None = None
     search_context: str | None = None
+    client_name: str | None = None
+    client_profile: dict[str, Any] | None = None
 
 
 class SourceCandidateResponse(BaseModel):
@@ -60,6 +62,8 @@ class ResearchJobResponse(BaseModel):
     company_domain: str | None
     role_title: str | None
     search_context: str | None
+    client_name: str | None
+    client_profile_jsonb: dict[str, Any] | None
     final_brief_jsonb: dict[str, Any] | None
     error_jsonb: dict[str, Any] | None
     created_at: datetime

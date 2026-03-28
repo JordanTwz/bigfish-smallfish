@@ -15,6 +15,8 @@ def build_research_snapshot(research_job, sources: list) -> dict:
     final_brief = research_job.final_brief_jsonb or {}
     discovery_insights = final_brief.get("discovery_insights") or {}
     return {
+        "client_name": research_job.client_name,
+        "client_profile": research_job.client_profile_jsonb,
         "source_urls": sorted(source.url for source in sources),
         "top_themes": list(final_brief.get("expertise_themes") or []),
         "interest_signals": [
@@ -68,6 +70,7 @@ def run_monitor_refresh(monitor_job_id: UUID) -> None:
         summary = {
             "event_count": len(events),
             "top_new_actions": [item.get("title") for item in opportunity_preview],
+            "client_name": refreshed_research_job.client_name,
             "checked_at": datetime.now(timezone.utc).isoformat(),
         }
         crud.update_monitor_job(
