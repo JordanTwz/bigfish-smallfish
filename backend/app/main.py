@@ -6,7 +6,13 @@ from sqlalchemy.orm import Session
 from app import crud
 from app.config import settings
 from app.db import get_db
-from app.schemas import RunCreate, RunResponse
+from app.schemas import (
+    ResearchJobCreate,
+    ResearchJobResponse,
+    RunCreate,
+    RunResponse,
+    SourceCandidateResponse,
+)
 
 app = FastAPI(title=settings.app_name)
 
@@ -32,3 +38,24 @@ def read_run(run_id: UUID, db: Session = Depends(get_db)) -> RunResponse:
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
     return run
+
+
+@app.post("/research-jobs", response_model=ResearchJobResponse, status_code=status.HTTP_201_CREATED)
+def create_research_job(payload: ResearchJobCreate, db: Session = Depends(get_db)) -> ResearchJobResponse:
+    return crud.create_research_job(db, payload)
+
+
+@app.get("/research-jobs/{job_id}", response_model=ResearchJobResponse)
+def read_research_job(job_id: UUID, db: Session = Depends(get_db)) -> ResearchJobResponse:
+    research_job = crud.get_research_job(db, job_id)
+    if research_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Research job not found")
+    return research_job
+
+
+@app.get("/research-jobs/{job_id}/sources", response_model=list[SourceCandidateResponse])
+def read_research_job_sources(job_id: UUID, db: Session = Depends(get_db)) -> list[SourceCandidateResponse]:
+    research_job = crud.get_research_job(db, job_id)
+    if research_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Research job not found")
+    return crud.list_research_job_sources(db, job_id)
