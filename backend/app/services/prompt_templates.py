@@ -110,6 +110,7 @@ def build_resonance_profile_prompts(
     goal: str,
     seed_profile: dict,
     evidence_summary: list[dict],
+    discovery_insights: dict | None,
     style_constraints: str | None,
     persona_constraints: str | None,
 ) -> tuple[str, str]:
@@ -133,6 +134,9 @@ Seed profile:
 
 Evidence summary:
 {evidence_summary}
+
+Discovery insights:
+{discovery_insights}
 
 Style constraints:
 {style_constraints}
@@ -163,6 +167,7 @@ def build_blog_draft_prompts(
     target_length: str,
     resonance_profile: dict,
     evidence_summary: list[dict],
+    discovery_insights: dict | None,
     style_constraints: str | None,
     persona_constraints: str | None,
     client_name: str | None,
@@ -194,6 +199,9 @@ Resonance profile:
 Evidence summary:
 {evidence_summary}
 
+Discovery insights:
+{discovery_insights}
+
 Style constraints:
 {style_constraints}
 
@@ -215,6 +223,11 @@ Return JSON with:
       "slug_suggestion": "string",
       "summary": "string",
       "audience_fit_rationale": "string",
+      "discovery_alignment": {{
+        "used_interest_signals": ["string"],
+        "used_content_angles": ["string"],
+        "used_credibility_opportunities": ["string"]
+      }},
       "outline": {{
         "sections": ["string"]
       }},

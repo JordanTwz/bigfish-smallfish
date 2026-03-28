@@ -4,6 +4,7 @@ from uuid import UUID
 from app import crud
 from app.db import SessionLocal
 from app.models import SourceCandidate
+from app.services.discovery_insights import build_discovery_insights
 from app.services.openai_content import OpenAIContentClient, OpenAIContentError
 from app.services.persona import build_evidence_summary, build_seed_profile
 from app.services.prompt_templates import build_blog_draft_prompts, build_resonance_profile_prompts
@@ -67,12 +68,14 @@ def run_blog_draft_job(blog_draft_job_id: UUID) -> None:
         crud.update_blog_draft_job_status(db, blog_draft_job, "profiling")
         evidence_summary = build_evidence_summary(sources)
         seed_profile = build_seed_profile(research_job, sources)
+        discovery_insights = _get_discovery_insights(research_job, sources)
         profile_system, profile_user = build_resonance_profile_prompts(
             candidate_name=research_job.candidate_name,
             company_name=research_job.company_name,
             goal=blog_draft_job.goal,
             seed_profile=seed_profile,
             evidence_summary=evidence_summary,
+            discovery_insights=discovery_insights,
             style_constraints=blog_draft_job.style_constraints,
             persona_constraints=blog_draft_job.persona_constraints,
         )
@@ -93,6 +96,7 @@ def run_blog_draft_job(blog_draft_job_id: UUID) -> None:
             target_length=blog_draft_job.target_length,
             resonance_profile=resonance_profile,
             evidence_summary=evidence_summary,
+            discovery_insights=discovery_insights,
             style_constraints=blog_draft_job.style_constraints,
             persona_constraints=blog_draft_job.persona_constraints,
             client_name=blog_draft_job.client_name,
@@ -113,7 +117,11 @@ def run_blog_draft_job(blog_draft_job_id: UUID) -> None:
             if not body_markdown or not title or not summary or not audience_fit_rationale:
                 continue
             references = _normalize_evidence_references(draft.get("evidence_references"), sources)
-            quality = draft.get("quality") if isinstance(draft.get("quality"), dict) else _default_quality(body_markdown)
+            quality = (
+                draft.get("quality")
+                if isinstance(draft.get("quality"), dict)
+                else _default_quality(body_markdown, draft.get("discovery_alignment"))
+            )
             crud.create_blog_draft(
                 db,
                 blog_draft_job_id=blog_draft_job.id,
@@ -186,12 +194,17 @@ def _normalize_evidence_references(references: object, sources: list[SourceCandi
     return normalized
 
 
-def _default_quality(body_markdown: str) -> dict:
+def _default_quality(body_markdown: str, discovery_alignment: object = None) -> dict:
     length = len(body_markdown)
+    aligned_signals = 0
+    if isinstance(discovery_alignment, dict):
+        aligned_signals += len(discovery_alignment.get("used_interest_signals") or [])
+        aligned_signals += len(discovery_alignment.get("used_content_angles") or [])
+        aligned_signals += len(discovery_alignment.get("used_credibility_opportunities") or [])
     return {
         "depth_score": min(round(length / 2500, 2), 1.0),
         "specificity_score": min(round(length / 3000, 2), 1.0),
-        "resonance_fit_score": 0.7,
+        "resonance_fit_score": min(0.55 + (aligned_signals * 0.1), 1.0),
         "warning_flags": [],
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -225,3 +238,11 @@ def _disclosure_note_for_mode(author_mode: str) -> str | None:
     if author_mode == "expert_commentary":
         return "This draft is written in a generic expert-commentary style and is not attributed to any real authority."
     return None
+
+
+def _get_discovery_insights(research_job, sources: list[SourceCandidate]) -> dict:
+    final_brief = research_job.final_brief_jsonb or {}
+    discovery_insights = final_brief.get("discovery_insights")
+    if isinstance(discovery_insights, dict):
+        return discovery_insights
+    return build_discovery_insights(research_job, sources)
