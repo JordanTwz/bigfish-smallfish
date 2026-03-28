@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     tinyfish_per_domain_concurrency: int = 2
     tinyfish_poll_interval_seconds: float = 3.0
     tinyfish_max_poll_seconds: int = 300
+    openai_api_key: str | None = None
+    openai_model: str = "gpt-5.4"
 
 
 settings = Settings()

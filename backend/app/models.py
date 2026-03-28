@@ -54,6 +54,9 @@ class ResearchJob(Base):
     tinyfish_runs: Mapped[list["TinyfishRun"]] = relationship(
         back_populates="research_job", cascade="all, delete-orphan"
     )
+    blog_draft_jobs: Mapped[list["BlogDraftJob"]] = relationship(
+        back_populates="research_job", cascade="all, delete-orphan"
+    )
 
 
 class SourceCandidate(Base):
@@ -106,3 +109,59 @@ class TinyfishRun(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     research_job: Mapped["ResearchJob"] = relationship(back_populates="tinyfish_runs")
+
+
+class BlogDraftJob(Base):
+    __tablename__ = "blog_draft_jobs"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    research_job_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("research_jobs.id", ondelete="CASCADE"), index=True
+    )
+    status: Mapped[str] = mapped_column(String(64), index=True, default="queued")
+    goal: Mapped[str] = mapped_column(String(64), default="resonance")
+    draft_count: Mapped[int] = mapped_column(default=3)
+    target_length: Mapped[str] = mapped_column(String(32), default="medium")
+    style_constraints: Mapped[str | None] = mapped_column(String(4096))
+    persona_constraints: Mapped[str | None] = mapped_column(String(4096))
+    resonance_profile_jsonb: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    error_jsonb: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    research_job: Mapped["ResearchJob"] = relationship(back_populates="blog_draft_jobs")
+    drafts: Mapped[list["BlogDraft"]] = relationship(
+        back_populates="blog_draft_job", cascade="all, delete-orphan"
+    )
+
+
+class BlogDraft(Base):
+    __tablename__ = "blog_drafts"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    blog_draft_job_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("blog_draft_jobs.id", ondelete="CASCADE"), index=True
+    )
+    title: Mapped[str] = mapped_column(String(512))
+    slug_suggestion: Mapped[str | None] = mapped_column(String(512))
+    summary: Mapped[str] = mapped_column(String(2048))
+    audience_fit_rationale: Mapped[str] = mapped_column(String(4096))
+    outline_jsonb: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    body_markdown: Mapped[str] = mapped_column(String(20000))
+    key_takeaways_jsonb: Mapped[list[str] | None] = mapped_column(JSONB)
+    tags_jsonb: Mapped[list[str] | None] = mapped_column(JSONB)
+    evidence_references_jsonb: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
+    quality_jsonb: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    blog_draft_job: Mapped["BlogDraftJob"] = relationship(back_populates="drafts")

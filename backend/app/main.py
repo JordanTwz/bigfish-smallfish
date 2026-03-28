@@ -8,12 +8,16 @@ from app import crud
 from app.config import settings
 from app.db import get_db
 from app.schemas import (
+    BlogDraftJobCreate,
+    BlogDraftJobResponse,
+    BlogDraftResponse,
     ResearchJobCreate,
     ResearchJobResponse,
     RunCreate,
     RunResponse,
     SourceCandidateResponse,
 )
+from app.services.blog_drafts import enqueue_blog_draft_job
 from app.services.orchestrator import enqueue_research_job
 
 app = FastAPI(title=settings.app_name)
@@ -91,3 +95,54 @@ def refresh_research_job(
         background_tasks.add_task(enqueue_research_job, str(research_job.id))
         research_job = crud.get_research_job(db, job_id)
     return research_job
+
+
+@app.post(
+    "/research-jobs/{job_id}/blog-drafts",
+    response_model=BlogDraftJobResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_blog_draft_job(
+    job_id: UUID,
+    payload: BlogDraftJobCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> BlogDraftJobResponse:
+    research_job = crud.get_research_job(db, job_id)
+    if research_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Research job not found")
+    blog_draft_job = crud.create_blog_draft_job(db, research_job, payload)
+    background_tasks.add_task(enqueue_blog_draft_job, str(blog_draft_job.id))
+    return blog_draft_job
+
+
+@app.get("/blog-draft-jobs/{blog_draft_job_id}", response_model=BlogDraftJobResponse)
+def read_blog_draft_job(blog_draft_job_id: UUID, db: Session = Depends(get_db)) -> BlogDraftJobResponse:
+    blog_draft_job = crud.get_blog_draft_job(db, blog_draft_job_id)
+    if blog_draft_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Blog draft job not found")
+    return blog_draft_job
+
+
+@app.get("/blog-draft-jobs/{blog_draft_job_id}/drafts", response_model=list[BlogDraftResponse])
+def read_blog_drafts(blog_draft_job_id: UUID, db: Session = Depends(get_db)) -> list[BlogDraftResponse]:
+    blog_draft_job = crud.get_blog_draft_job(db, blog_draft_job_id)
+    if blog_draft_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Blog draft job not found")
+    return crud.list_blog_drafts(db, blog_draft_job_id)
+
+
+@app.post("/blog-draft-jobs/{blog_draft_job_id}/refresh", response_model=BlogDraftJobResponse)
+def refresh_blog_draft_job(
+    blog_draft_job_id: UUID,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> BlogDraftJobResponse:
+    blog_draft_job = crud.get_blog_draft_job(db, blog_draft_job_id)
+    if blog_draft_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Blog draft job not found")
+    if blog_draft_job.status not in {"profiling", "outlining", "drafting"}:
+        crud.update_blog_draft_job_status(db, blog_draft_job, "queued")
+        background_tasks.add_task(enqueue_blog_draft_job, str(blog_draft_job.id))
+        blog_draft_job = crud.get_blog_draft_job(db, blog_draft_job_id)
+    return blog_draft_job

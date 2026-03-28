@@ -35,6 +35,14 @@ pip install -e .
 cp .env.example .env
 ```
 
+Required environment variables in `.env`:
+
+```env
+DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/bigfish_smallfish
+TINYFISH_API_KEY=your_tinyfish_key_here
+OPENAI_API_KEY=your_openai_key_here
+```
+
 ## Start Postgres
 
 ```bash
@@ -92,6 +100,7 @@ Add your Tinyfish API key to `.env`:
 
 ```env
 TINYFISH_API_KEY=your_real_key_here
+OPENAI_API_KEY=your_real_key_here
 ```
 
 Then export it in your shell and start an async Tinyfish run:
@@ -192,6 +201,69 @@ Typical status flow:
 - `discovering`
 - `extracting`
 - `scoring`
+- `completed`
+
+Possible non-success states:
+
+- `partial`
+- `failed`
+
+## Blog Draft API
+
+The blog-draft workflow depends on a completed or partial research job with usable sources.
+
+Create a blog draft job:
+
+```bash
+curl -X POST http://localhost:8000/research-jobs/<research_job_id>/blog-drafts \
+  -H "Content-Type: application/json" \
+  -d '{
+    "goal": "resonance",
+    "draft_count": 3,
+    "target_length": "medium",
+    "style_constraints": "Write with technical rigor and specificity. Avoid generic leadership platitudes.",
+    "persona_constraints": "Do not mimic the target. Optimize for depth, clarity, and authentic engineering curiosity."
+  }'
+```
+
+Sample flow using a public-profile research job:
+
+```bash
+curl -X POST http://localhost:8000/research-jobs/f20ef9c9-bd04-4446-b6a6-4b7f49a6aecb/blog-drafts \
+  -H "Content-Type: application/json" \
+  -d '{
+    "goal": "resonance",
+    "draft_count": 2,
+    "target_length": "medium",
+    "style_constraints": "Focus on deep technical tradeoffs and practical engineering judgment.",
+    "persona_constraints": "Avoid exaggerated claims and invented personal experience."
+  }'
+```
+
+Get the current blog draft job state:
+
+```bash
+curl http://localhost:8000/blog-draft-jobs/<blog_draft_job_id>
+```
+
+Get the generated drafts:
+
+```bash
+curl http://localhost:8000/blog-draft-jobs/<blog_draft_job_id>/drafts
+```
+
+Requeue a blog draft job manually:
+
+```bash
+curl -X POST http://localhost:8000/blog-draft-jobs/<blog_draft_job_id>/refresh
+```
+
+Typical blog draft status flow:
+
+- `queued`
+- `profiling`
+- `outlining`
+- `drafting`
 - `completed`
 
 Possible non-success states:
