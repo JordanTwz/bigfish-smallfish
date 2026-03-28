@@ -111,7 +111,12 @@ def create_blog_draft_job(
     research_job = crud.get_research_job(db, job_id)
     if research_job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Research job not found")
-    blog_draft_job = crud.create_blog_draft_job(db, research_job, payload)
+    blog_draft_job = crud.create_blog_draft_job(
+        db,
+        research_job,
+        payload,
+        origin_endpoint="blog-drafts",
+    )
     background_tasks.add_task(enqueue_blog_draft_job, str(blog_draft_job.id))
     return blog_draft_job
 
@@ -162,7 +167,12 @@ def create_persona_post_job(
     research_job = crud.get_research_job(db, job_id)
     if research_job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Research job not found")
-    blog_draft_job = crud.create_blog_draft_job(db, research_job, payload)
+    blog_draft_job = crud.create_blog_draft_job(
+        db,
+        research_job,
+        payload,
+        origin_endpoint="persona-post-jobs",
+    )
     background_tasks.add_task(enqueue_blog_draft_job, str(blog_draft_job.id))
     return blog_draft_job
 

@@ -118,6 +118,7 @@ def run_blog_draft_job(blog_draft_job_id: UUID) -> None:
                 db,
                 blog_draft_job_id=blog_draft_job.id,
                 title=title,
+                origin_endpoint=blog_draft_job.origin_endpoint,
                 angle=_normalize_angle(draft.get("angle")),
                 author_mode=_normalize_author_mode(draft.get("author_mode")),
                 slug_suggestion=_slugify(draft.get("slug_suggestion") or title),

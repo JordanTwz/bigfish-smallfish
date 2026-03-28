@@ -154,12 +154,19 @@ def create_source_candidate(
     return source_candidate
 
 
-def create_blog_draft_job(db: Session, research_job: ResearchJob, payload: BlogDraftJobCreate) -> BlogDraftJob:
+def create_blog_draft_job(
+    db: Session,
+    research_job: ResearchJob,
+    payload: BlogDraftJobCreate,
+    *,
+    origin_endpoint: str,
+) -> BlogDraftJob:
     blog_draft_job = BlogDraftJob(
         research_job_id=research_job.id,
         goal=payload.goal,
         draft_count=payload.draft_count,
         target_length=payload.target_length,
+        origin_endpoint=origin_endpoint,
         style_constraints=payload.style_constraints,
         persona_constraints=payload.persona_constraints,
         client_name=payload.client_name,
@@ -209,6 +216,7 @@ def create_blog_draft(
     *,
     blog_draft_job_id: UUID,
     title: str,
+    origin_endpoint: str,
     angle: str,
     author_mode: str,
     slug_suggestion: str | None,
@@ -225,6 +233,7 @@ def create_blog_draft(
     blog_draft = BlogDraft(
         blog_draft_job_id=blog_draft_job_id,
         title=title,
+        origin_endpoint=origin_endpoint,
         angle=angle,
         author_mode=author_mode,
         slug_suggestion=slug_suggestion,
