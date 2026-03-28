@@ -138,6 +138,14 @@ curl -X POST http://localhost:8000/research-jobs/<job_id>/blog-drafts \
   }'
 ```
 
+These drafts now use:
+
+- the ranked research sources
+- the resonance profile
+- `final_brief_jsonb.discovery_insights.public_interest_signals`
+- `final_brief_jsonb.discovery_insights.safe_content_angles`
+- `final_brief_jsonb.discovery_insights.credibility_opportunities`
+
 9. Poll the blog draft job and fetch the generated drafts:
 
 ```bash
@@ -166,6 +174,8 @@ curl -X POST http://localhost:8000/research-jobs/<job_id>/persona-post-jobs \
   }'
 ```
 
+These persona posts also use the same discovery insights to guide topic selection and positioning.
+
 11. Poll the persona post job and fetch the drafts:
 
 ```bash
@@ -177,8 +187,8 @@ The overall lifecycle is:
 
 - `research-jobs` gather structured evidence about the target with TinyFish
 - `research-jobs.final_brief_jsonb.discovery_insights` surfaces safe public-interest and opportunity analysis
-- `blog-draft-jobs` turn that evidence into reviewable technical article drafts with OpenAI
-- `persona-post-jobs` turn that evidence into client-facing and expert-commentary style persona drafts with OpenAI
+- `blog-draft-jobs` turn that evidence and discovery insights into reviewable technical article drafts with OpenAI
+- `persona-post-jobs` turn that evidence and discovery insights into client-facing and expert-commentary style persona drafts with OpenAI
 
 ## Debug Run API
 
