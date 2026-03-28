@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     tinyfish_per_domain_concurrency: int = 2
     tinyfish_poll_interval_seconds: float = 3.0
     tinyfish_max_poll_seconds: int = 300
+    mataroa_base_url: str = "https://mataroa.blog"
+    mataroa_login_url: str = "https://mataroa.blog/accounts/login/"
+    mataroa_username: str | None = None
+    mataroa_password: str | None = None
     openai_api_key: str | None = None
     openai_model: str = "gpt-5.4"
 
