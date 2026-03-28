@@ -95,6 +95,9 @@ def run_blog_draft_job(blog_draft_job_id: UUID) -> None:
             evidence_summary=evidence_summary,
             style_constraints=blog_draft_job.style_constraints,
             persona_constraints=blog_draft_job.persona_constraints,
+            client_name=blog_draft_job.client_name,
+            client_profile=blog_draft_job.client_profile_jsonb,
+            requested_angles=blog_draft_job.requested_angles_jsonb,
         )
         draft_payload = client.generate_json(system_prompt=draft_system, user_prompt=draft_user)
         drafts = draft_payload.get("drafts") or []
@@ -115,11 +118,14 @@ def run_blog_draft_job(blog_draft_job_id: UUID) -> None:
                 db,
                 blog_draft_job_id=blog_draft_job.id,
                 title=title,
+                angle=_normalize_angle(draft.get("angle")),
+                author_mode=_normalize_author_mode(draft.get("author_mode")),
                 slug_suggestion=_slugify(draft.get("slug_suggestion") or title),
                 summary=summary,
                 audience_fit_rationale=audience_fit_rationale,
                 outline_jsonb=draft.get("outline") if isinstance(draft.get("outline"), dict) else {"sections": []},
                 body_markdown=body_markdown,
+                disclosure_note=_disclosure_note_for_mode(_normalize_author_mode(draft.get("author_mode"))),
                 key_takeaways_jsonb=_string_list(draft.get("key_takeaways")),
                 tags_jsonb=_string_list(draft.get("tags")),
                 evidence_references_jsonb=references,
@@ -199,3 +205,23 @@ def _string_list(value: object) -> list[str]:
 
 def _slugify(value: str) -> str:
     return "-".join(part for part in value.lower().replace("_", " ").split() if part)
+
+
+def _normalize_angle(value: object) -> str:
+    normalized = str(value or "client_voice").strip().lower()
+    if normalized not in {"client_voice", "expert_commentary"}:
+        return "client_voice"
+    return normalized
+
+
+def _normalize_author_mode(value: object) -> str:
+    normalized = str(value or "client_voice").strip().lower()
+    if normalized not in {"client_voice", "expert_commentary"}:
+        return "client_voice"
+    return normalized
+
+
+def _disclosure_note_for_mode(author_mode: str) -> str | None:
+    if author_mode == "expert_commentary":
+        return "This draft is written in a generic expert-commentary style and is not attributed to any real authority."
+    return None

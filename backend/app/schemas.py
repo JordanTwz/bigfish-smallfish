@@ -73,6 +73,9 @@ class BlogDraftJobCreate(BaseModel):
     target_length: str = "medium"
     style_constraints: str | None = None
     persona_constraints: str | None = None
+    client_name: str | None = None
+    client_profile: dict[str, Any] | None = None
+    requested_angles: list[str] | None = None
 
 
 class BlogDraftResponse(BaseModel):
@@ -81,11 +84,14 @@ class BlogDraftResponse(BaseModel):
     id: UUID
     blog_draft_job_id: UUID
     title: str
+    angle: str
+    author_mode: str
     slug_suggestion: str | None
     summary: str
     audience_fit_rationale: str
     outline_jsonb: dict[str, Any]
     body_markdown: str
+    disclosure_note: str | None
     key_takeaways_jsonb: list[str] | None
     tags_jsonb: list[str] | None
     evidence_references_jsonb: list[dict[str, Any]] | None
@@ -105,6 +111,9 @@ class BlogDraftJobResponse(BaseModel):
     target_length: str
     style_constraints: str | None
     persona_constraints: str | None
+    client_name: str | None
+    client_profile_jsonb: dict[str, Any] | None
+    requested_angles_jsonb: list[str] | None
     resonance_profile_jsonb: dict[str, Any] | None
     error_jsonb: dict[str, Any] | None
     created_at: datetime

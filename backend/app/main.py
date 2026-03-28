@@ -137,3 +137,54 @@ def refresh_blog_draft_job(
         background_tasks.add_task(enqueue_blog_draft_job, str(blog_draft_job.id))
         blog_draft_job = crud.get_blog_draft_job(db, blog_draft_job_id)
     return blog_draft_job
+
+
+@app.post(
+    "/research-jobs/{job_id}/persona-post-jobs",
+    response_model=BlogDraftJobResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_persona_post_job(
+    job_id: UUID,
+    payload: BlogDraftJobCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> BlogDraftJobResponse:
+    research_job = crud.get_research_job(db, job_id)
+    if research_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Research job not found")
+    blog_draft_job = crud.create_blog_draft_job(db, research_job, payload)
+    background_tasks.add_task(enqueue_blog_draft_job, str(blog_draft_job.id))
+    return blog_draft_job
+
+
+@app.get("/persona-post-jobs/{blog_draft_job_id}", response_model=BlogDraftJobResponse)
+def read_persona_post_job(blog_draft_job_id: UUID, db: Session = Depends(get_db)) -> BlogDraftJobResponse:
+    blog_draft_job = crud.get_blog_draft_job(db, blog_draft_job_id)
+    if blog_draft_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Persona post job not found")
+    return blog_draft_job
+
+
+@app.get("/persona-post-jobs/{blog_draft_job_id}/drafts", response_model=list[BlogDraftResponse])
+def read_persona_post_drafts(blog_draft_job_id: UUID, db: Session = Depends(get_db)) -> list[BlogDraftResponse]:
+    blog_draft_job = crud.get_blog_draft_job(db, blog_draft_job_id)
+    if blog_draft_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Persona post job not found")
+    return crud.list_blog_drafts(db, blog_draft_job_id)
+
+
+@app.post("/persona-post-jobs/{blog_draft_job_id}/refresh", response_model=BlogDraftJobResponse)
+def refresh_persona_post_job(
+    blog_draft_job_id: UUID,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> BlogDraftJobResponse:
+    blog_draft_job = crud.get_blog_draft_job(db, blog_draft_job_id)
+    if blog_draft_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Persona post job not found")
+    if blog_draft_job.status not in {"profiling", "outlining", "drafting"}:
+        crud.update_blog_draft_job_status(db, blog_draft_job, "queued")
+        background_tasks.add_task(enqueue_blog_draft_job, str(blog_draft_job.id))
+        blog_draft_job = crud.get_blog_draft_job(db, blog_draft_job_id)
+    return blog_draft_job

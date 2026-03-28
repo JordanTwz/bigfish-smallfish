@@ -165,6 +165,9 @@ def build_blog_draft_prompts(
     evidence_summary: list[dict],
     style_constraints: str | None,
     persona_constraints: str | None,
+    client_name: str | None,
+    client_profile: dict | None,
+    requested_angles: list[str] | None,
 ) -> tuple[str, str]:
     system_prompt = """
 You write reviewable technical blog drafts for a human author.
@@ -172,6 +175,8 @@ Output only valid JSON.
 Do not imitate the target's voice.
 Do not invent credentials, projects, or personal anecdotes.
 Write with technical depth, specificity, and sincere curiosity.
+Do not impersonate a real authority or fabricate endorsement from a real person.
+When asked for expert-style commentary, write it as a clearly non-attributed editorial perspective.
 """.strip()
 
     user_prompt = f"""
@@ -195,10 +200,17 @@ Style constraints:
 Persona constraints:
 {persona_constraints}
 
+Client context:
+- Client name: {client_name}
+- Client profile: {client_profile}
+- Requested angles: {requested_angles}
+
 Return JSON with:
 {{
   "drafts": [
     {{
+      "angle": "client_voice | expert_commentary",
+      "author_mode": "client_voice | expert_commentary",
       "title": "string",
       "slug_suggestion": "string",
       "summary": "string",
@@ -207,6 +219,7 @@ Return JSON with:
         "sections": ["string"]
       }},
       "body_markdown": "string",
+      "disclosure_note": "string",
       "key_takeaways": ["string"],
       "tags": ["string"],
       "evidence_references": [
