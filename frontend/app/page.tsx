@@ -4,9 +4,9 @@ import {
   FormEvent,
   ReactNode,
   startTransition,
+  useCallback,
   useDeferredValue,
   useEffect,
-  useEffectEvent,
   useMemo,
   useState,
 } from "react";
@@ -320,7 +320,7 @@ function deriveWorkspaceSignal(workspace: Workspace) {
   if (researchStatus) {
     return "active";
   }
-  return "idle";
+  return "neutral";
 }
 
 function toPersistedState(workspaces: Workspace[], activeWorkspaceId: string | null, activeTab: WorkspaceTab): PersistedState {
@@ -435,6 +435,7 @@ export default function Home() {
   const [workspaceQuery, setWorkspaceQuery] = useState("");
   const deferredWorkspaceQuery = useDeferredValue(workspaceQuery);
   const [isBootstrapped, setIsBootstrapped] = useState(false);
+  const [hasHydratedPersistedWorkspaces, setHasHydratedPersistedWorkspaces] = useState(false);
   const [launchingWorkspace, setLaunchingWorkspace] = useState(false);
   const [health, setHealth] = useState<BackendHealth>("checking");
   const [runs, setRuns] = useState<RunResponse[]>([]);
@@ -466,23 +467,26 @@ export default function Home() {
     [workspaces],
   );
 
-  const mergeWorkspace = useEffectEvent((workspaceId: string, updater: (workspace: Workspace) => Workspace) => {
+  const mergeWorkspace = useCallback((workspaceId: string, updater: (workspace: Workspace) => Workspace) => {
     setWorkspaces((current) =>
       current.map((workspace) => (workspace.id === workspaceId ? updater(workspace) : workspace)),
     );
-  });
+  }, []);
 
-  const setWorkspaceAction = useEffectEvent((workspaceId: string, action: ActionKey, active: boolean) => {
-    mergeWorkspace(workspaceId, (workspace) => ({
-      ...workspace,
-      actions: {
-        ...workspace.actions,
-        [action]: active,
-      },
-    }));
-  });
+  const setWorkspaceAction = useCallback(
+    (workspaceId: string, action: ActionKey, active: boolean) => {
+      mergeWorkspace(workspaceId, (workspace) => ({
+        ...workspace,
+        actions: {
+          ...workspace.actions,
+          [action]: active,
+        },
+      }));
+    },
+    [mergeWorkspace],
+  );
 
-  const refreshOperations = useEffectEvent(async () => {
+  const refreshOperations = useCallback(async () => {
     try {
       await getHealth();
       setHealth("healthy");
@@ -496,9 +500,9 @@ export default function Home() {
     } catch {
       setRuns([]);
     }
-  });
+  }, []);
 
-  const refreshWorkspace = useEffectEvent(async (workspace: Workspace) => {
+  const refreshWorkspace = useCallback(async (workspace: Workspace) => {
     const nextState: Partial<Workspace> = {};
 
     try {
@@ -558,9 +562,9 @@ export default function Home() {
         lastError: error instanceof Error ? error.message : "Failed to refresh workspace state.",
       }));
     }
-  });
+  }, [mergeWorkspace]);
 
-  const pollLiveWorkspaces = useEffectEvent(async () => {
+  const pollLiveWorkspaces = useCallback(async () => {
     await Promise.all(
       workspaces.map(async (workspace) => {
         const shouldPoll =
@@ -575,7 +579,7 @@ export default function Home() {
         }
       }),
     );
-  });
+  }, [refreshWorkspace, workspaces]);
 
   useEffect(() => {
     const stored = parsePersistedState(window.localStorage.getItem(STORAGE_KEY));
@@ -599,13 +603,14 @@ export default function Home() {
   }, [activeTab, activeWorkspaceId, isBootstrapped, workspaces]);
 
   useEffect(() => {
-    if (!isBootstrapped) {
+    if (!isBootstrapped || hasHydratedPersistedWorkspaces) {
       return;
     }
 
+    setHasHydratedPersistedWorkspaces(true);
     void refreshOperations();
     void Promise.all(workspaces.map((workspace) => refreshWorkspace(workspace)));
-  }, [isBootstrapped]);
+  }, [hasHydratedPersistedWorkspaces, isBootstrapped, refreshOperations, refreshWorkspace, workspaces]);
 
   useEffect(() => {
     if (!isBootstrapped) {
@@ -1084,7 +1089,7 @@ export default function Home() {
                         <ActionButton
                           label="Refresh Research"
                           detail="POST /research-jobs/:id/refresh"
-                          disabled={!activeWorkspace.researchJobId || activeWorkspace.actions.researchRefresh}
+                          disabled={!activeWorkspace.researchJobId || Boolean(activeWorkspace.actions.researchRefresh)}
                           onClick={() =>
                             activeWorkspace.researchJobId
                               ? handleResearchRefresh(activeWorkspace.id, activeWorkspace.researchJobId)
@@ -1094,31 +1099,31 @@ export default function Home() {
                         <ActionButton
                           label="Generate Opportunities"
                           detail="POST /research-jobs/:id/opportunities"
-                          disabled={!isResearchSettled(activeWorkspace) || activeWorkspace.actions.opportunitiesCreate}
+                          disabled={!isResearchSettled(activeWorkspace) || Boolean(activeWorkspace.actions.opportunitiesCreate)}
                           onClick={() => handleOpportunityCreate(activeWorkspace)}
                         />
                         <ActionButton
                           label="Create Monitor"
                           detail="POST /research-jobs/:id/monitor"
-                          disabled={!isResearchSettled(activeWorkspace) || activeWorkspace.actions.monitorCreate}
+                          disabled={!isResearchSettled(activeWorkspace) || Boolean(activeWorkspace.actions.monitorCreate)}
                           onClick={() => handleMonitorCreate(activeWorkspace)}
                         />
                         <ActionButton
                           label="Refresh Monitor"
                           detail="POST /monitor-jobs/:id/refresh"
-                          disabled={!activeWorkspace.monitorJobId || activeWorkspace.actions.monitorRefresh}
+                          disabled={!activeWorkspace.monitorJobId || Boolean(activeWorkspace.actions.monitorRefresh)}
                           onClick={() => handleMonitorRefresh(activeWorkspace)}
                         />
                         <ActionButton
                           label="Create Blog Drafts"
                           detail="POST /research-jobs/:id/blog-drafts"
-                          disabled={!isResearchSettled(activeWorkspace) || activeWorkspace.actions.blogCreate}
+                          disabled={!isResearchSettled(activeWorkspace) || Boolean(activeWorkspace.actions.blogCreate)}
                           onClick={() => handleBlogDraftCreate(activeWorkspace)}
                         />
                         <ActionButton
                           label="Create Persona Posts"
                           detail="POST /research-jobs/:id/persona-post-jobs"
-                          disabled={!isResearchSettled(activeWorkspace) || activeWorkspace.actions.personaCreate}
+                          disabled={!isResearchSettled(activeWorkspace) || Boolean(activeWorkspace.actions.personaCreate)}
                           onClick={() => handlePersonaCreate(activeWorkspace)}
                         />
                       </div>
@@ -1171,7 +1176,7 @@ export default function Home() {
                               ? handleResearchRefresh(activeWorkspace.id, activeWorkspace.researchJobId)
                               : undefined
                           }
-                          disabled={!activeWorkspace.researchJobId || activeWorkspace.actions.researchRefresh}
+                          disabled={!activeWorkspace.researchJobId || Boolean(activeWorkspace.actions.researchRefresh)}
                           className="rounded-2xl border border-[var(--line-strong)] bg-[var(--panel-2)] px-4 py-2 text-sm font-semibold text-[var(--muted-strong)] transition hover:border-cyan-400/35 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           {activeWorkspace.actions.researchRefresh ? "Refreshing..." : "Refresh Research"}
@@ -1235,7 +1240,7 @@ export default function Home() {
                         <button
                           type="button"
                           onClick={() => handleOpportunityCreate(activeWorkspace)}
-                          disabled={!isResearchSettled(activeWorkspace) || activeWorkspace.actions.opportunitiesCreate}
+                          disabled={!isResearchSettled(activeWorkspace) || Boolean(activeWorkspace.actions.opportunitiesCreate)}
                           className="rounded-2xl border border-emerald-400/35 bg-emerald-400/10 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-400/16 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           {activeWorkspace.actions.opportunitiesCreate ? "Generating..." : "Generate Opportunity Run"}
@@ -1298,7 +1303,7 @@ export default function Home() {
                           <button
                             type="button"
                             onClick={() => handleMonitorCreate(activeWorkspace)}
-                            disabled={!isResearchSettled(activeWorkspace) || activeWorkspace.actions.monitorCreate}
+                            disabled={!isResearchSettled(activeWorkspace) || Boolean(activeWorkspace.actions.monitorCreate)}
                             className="rounded-2xl border border-cyan-400/35 bg-cyan-400/10 px-4 py-2 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/16 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             {activeWorkspace.actions.monitorCreate ? "Creating..." : "Capture Monitor Baseline"}
@@ -1306,7 +1311,7 @@ export default function Home() {
                           <button
                             type="button"
                             onClick={() => handleMonitorRefresh(activeWorkspace)}
-                            disabled={!activeWorkspace.monitorJobId || activeWorkspace.actions.monitorRefresh}
+                            disabled={!activeWorkspace.monitorJobId || Boolean(activeWorkspace.actions.monitorRefresh)}
                             className="rounded-2xl border border-[var(--line-strong)] bg-[var(--panel-2)] px-4 py-2 text-sm font-semibold text-[var(--muted-strong)] transition hover:border-cyan-400/35 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             {activeWorkspace.actions.monitorRefresh ? "Refreshing..." : "Run Monitor Refresh"}
@@ -1383,7 +1388,7 @@ export default function Home() {
                           <button
                             type="button"
                             onClick={() => handleBlogDraftCreate(activeWorkspace)}
-                            disabled={!isResearchSettled(activeWorkspace) || activeWorkspace.actions.blogCreate}
+                            disabled={!isResearchSettled(activeWorkspace) || Boolean(activeWorkspace.actions.blogCreate)}
                             className="rounded-2xl border border-amber-400/35 bg-amber-400/10 px-4 py-2 text-sm font-semibold text-amber-100 transition hover:bg-amber-400/16 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             {activeWorkspace.actions.blogCreate ? "Creating..." : "Generate Blog Draft Job"}
@@ -1391,7 +1396,7 @@ export default function Home() {
                           <button
                             type="button"
                             onClick={() => handleBlogDraftRefresh(activeWorkspace)}
-                            disabled={!activeWorkspace.blogDraftJobId || activeWorkspace.actions.blogRefresh}
+                            disabled={!activeWorkspace.blogDraftJobId || Boolean(activeWorkspace.actions.blogRefresh)}
                             className="rounded-2xl border border-[var(--line-strong)] bg-[var(--panel-2)] px-4 py-2 text-sm font-semibold text-[var(--muted-strong)] transition hover:border-amber-400/35 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             {activeWorkspace.actions.blogRefresh ? "Refreshing..." : "Refresh Draft Job"}
@@ -1428,7 +1433,7 @@ export default function Home() {
                           <button
                             type="button"
                             onClick={() => handlePersonaCreate(activeWorkspace)}
-                            disabled={!isResearchSettled(activeWorkspace) || activeWorkspace.actions.personaCreate}
+                            disabled={!isResearchSettled(activeWorkspace) || Boolean(activeWorkspace.actions.personaCreate)}
                             className="rounded-2xl border border-violet-400/35 bg-violet-400/10 px-4 py-2 text-sm font-semibold text-violet-100 transition hover:bg-violet-400/16 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             {activeWorkspace.actions.personaCreate ? "Creating..." : "Generate Persona Post Job"}
@@ -1436,7 +1441,7 @@ export default function Home() {
                           <button
                             type="button"
                             onClick={() => handlePersonaRefresh(activeWorkspace)}
-                            disabled={!activeWorkspace.personaJobId || activeWorkspace.actions.personaRefresh}
+                            disabled={!activeWorkspace.personaJobId || Boolean(activeWorkspace.actions.personaRefresh)}
                             className="rounded-2xl border border-[var(--line-strong)] bg-[var(--panel-2)] px-4 py-2 text-sm font-semibold text-[var(--muted-strong)] transition hover:border-violet-400/35 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             {activeWorkspace.actions.personaRefresh ? "Refreshing..." : "Refresh Persona Job"}
