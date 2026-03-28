@@ -270,3 +270,54 @@ Possible non-success states:
 
 - `partial`
 - `failed`
+
+## Persona Post API
+
+This workflow generates two safe angles for persona-building content:
+
+- `client_voice`: a first-person draft from the client's perspective about what they care about and have learned
+- `expert_commentary`: a non-attributed expert-style commentary draft that highlights the client's technical depth without impersonating any real authority
+
+Create a persona post job:
+
+```bash
+curl -X POST http://localhost:8000/research-jobs/<research_job_id>/persona-post-jobs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "goal": "credibility",
+    "draft_count": 2,
+    "target_length": "medium",
+    "client_name": "Jane Smith",
+    "client_profile": {
+      "current_role": "Backend engineer",
+      "interests": ["distributed systems", "observability", "developer tooling"],
+      "voice_notes": ["technical", "clear", "curious"]
+    },
+    "requested_angles": ["client_voice", "expert_commentary"],
+    "style_constraints": "Write with technical depth and specificity. Avoid hype.",
+    "persona_constraints": "Do not impersonate a real authority or fabricate endorsement."
+  }'
+```
+
+Get the current persona post job state:
+
+```bash
+curl http://localhost:8000/persona-post-jobs/<persona_post_job_id>
+```
+
+Get the generated persona post drafts:
+
+```bash
+curl http://localhost:8000/persona-post-jobs/<persona_post_job_id>/drafts
+```
+
+Requeue a persona post job manually:
+
+```bash
+curl -X POST http://localhost:8000/persona-post-jobs/<persona_post_job_id>/refresh
+```
+
+Notes:
+
+- The returned drafts include `angle`, `author_mode`, and `disclosure_note`.
+- `expert_commentary` drafts are explicitly marked as non-attributed editorial commentary.
