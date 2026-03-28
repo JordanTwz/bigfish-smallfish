@@ -158,3 +158,8 @@ export type RunResponse = {
   updated_at: string;
   finished_at: string | null;
 };
+
+export type RunCreate = {
+  source_url: string;
+  goal: string;
+};

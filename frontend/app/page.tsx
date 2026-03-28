@@ -1,46 +1,77 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  FormEvent,
+  ReactNode,
+  startTransition,
+  useDeferredValue,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useState,
+} from "react";
 
-type ResearchJobCreate = {
-  candidate_name: string;
-  company_name: string | null;
-  company_domain: string | null;
-  role_title: string | null;
-  search_context: string | null;
-};
+import {
+  createBlogDraftJob,
+  createMonitorJob,
+  createOpportunityJob,
+  createPersonaPostJob,
+  createResearchJob,
+  createRun,
+  getApiBaseUrl,
+  getBlogDraftJob,
+  getHealth,
+  getMonitorJob,
+  getOpportunityJob,
+  getPersonaPostJob,
+  getResearchJob,
+  listBlogDrafts,
+  listMonitorEvents,
+  listOpportunityItems,
+  listPersonaPostDrafts,
+  listResearchSources,
+  listRuns,
+  refreshBlogDraftJob,
+  refreshMonitorJob,
+  refreshPersonaPostJob,
+  refreshResearchJob,
+} from "../lib/api";
+import type {
+  BlogDraftJobCreate,
+  BlogDraftJobResponse,
+  BlogDraftResponse,
+  MonitorEventResponse,
+  MonitorJobResponse,
+  OpportunityJobResponse,
+  OpportunityResponse,
+  ResearchJobCreate,
+  ResearchJobResponse,
+  RunResponse,
+  SourceCandidateResponse,
+} from "../lib/types";
 
-type ResearchJobResponse = {
-  id: string;
-  status: string;
-  candidate_name: string;
-  company_name: string | null;
-  company_domain: string | null;
-  role_title: string | null;
-  search_context: string | null;
-  final_brief_jsonb: Record<string, unknown> | null;
-  error_jsonb: Record<string, unknown> | null;
-  created_at: string;
-  updated_at: string;
-  finished_at: string | null;
-};
+const STORAGE_KEY = "bigfish-ops-console-v1";
+const API_BASE_URL = getApiBaseUrl();
 
-type SourceCandidateResponse = {
-  id: string;
-  research_job_id: string;
-  url: string;
-  normalized_url: string | null;
-  title: string | null;
-  source_type: string | null;
-  stage: string;
-  confidence: number | null;
-  ranking_score: number | null;
-  evidence_jsonb: Record<string, unknown> | null;
-  created_at: string;
-  updated_at: string;
-};
+const researchActiveStatuses = new Set(["queued", "discovering", "extracting", "scoring"]);
+const asyncActiveStatuses = new Set(["queued", "ranking", "profiling", "outlining", "drafting", "checking"]);
+const researchTerminalStatuses = new Set(["completed", "partial", "failed"]);
+const workspaceTabs = ["overview", "research", "opportunities", "monitoring", "blog", "persona"] as const;
 
-type IntakeState = {
+type WorkspaceTab = (typeof workspaceTabs)[number];
+type BackendHealth = "checking" | "healthy" | "unreachable";
+type ActionKey =
+  | "researchRefresh"
+  | "opportunitiesCreate"
+  | "monitorCreate"
+  | "monitorRefresh"
+  | "blogCreate"
+  | "blogRefresh"
+  | "personaCreate"
+  | "personaRefresh";
+
+type MissionComposerState = {
+  clientName: string;
   candidateName: string;
   companyName: string;
   companyDomain: string;
@@ -48,55 +79,180 @@ type IntakeState = {
   searchContext: string;
 };
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+type DraftFormState = {
+  goal: string;
+  draftCount: string;
+  targetLength: string;
+  styleConstraints: string;
+  personaConstraints: string;
+  clientName: string;
+  clientProfileText: string;
+  requestedAnglesText: string;
+};
 
-const initialForm: IntakeState = {
+type MonitorFormState = {
+  cadence: string;
+};
+
+type RunFormState = {
+  sourceUrl: string;
+  goal: string;
+};
+
+type Workspace = {
+  id: string;
+  createdAt: string;
+  clientName: string;
+  candidateName: string;
+  companyName: string;
+  companyDomain: string;
+  roleTitle: string;
+  searchContext: string;
+  researchJobId: string | null;
+  researchJob: ResearchJobResponse | null;
+  sources: SourceCandidateResponse[];
+  opportunityJobId: string | null;
+  opportunityJob: OpportunityJobResponse | null;
+  opportunities: OpportunityResponse[];
+  monitorJobId: string | null;
+  monitorJob: MonitorJobResponse | null;
+  monitorEvents: MonitorEventResponse[];
+  blogDraftForm: DraftFormState;
+  blogDraftJobId: string | null;
+  blogDraftJob: BlogDraftJobResponse | null;
+  blogDrafts: BlogDraftResponse[];
+  personaForm: DraftFormState;
+  personaJobId: string | null;
+  personaJob: BlogDraftJobResponse | null;
+  personaDrafts: BlogDraftResponse[];
+  monitorForm: MonitorFormState;
+  actions: Partial<Record<ActionKey, boolean>>;
+  lastError: string | null;
+};
+
+type PersistedState = {
+  workspaces: Workspace[];
+  activeWorkspaceId: string | null;
+  activeTab: WorkspaceTab;
+};
+
+const initialComposer: MissionComposerState = {
+  clientName: "Northstar Ventures",
   candidateName: "Jane Doe",
   companyName: "ExampleCo",
   companyDomain: "example.com",
   roleTitle: "Software Engineer Intern",
-  searchContext: "Technical screen for a backend/platform role",
+  searchContext: "Technical screen for a backend or platform role.",
 };
 
-const activeStatuses = new Set(["queued", "discovering", "extracting", "scoring"]);
-const terminalStatuses = new Set(["completed", "partial", "failed"]);
+const defaultMonitorForm: MonitorFormState = {
+  cadence: "manual",
+};
 
-const pipelineDefinitions = [
-  {
-    name: "Queued",
-    detail: "The backend has accepted the request and is waiting to dispatch discovery work.",
-    matches: ["queued"],
-  },
-  {
-    name: "Discovery",
-    detail: "TinyFish fans out targeted searches to identify likely public profiles and references.",
-    matches: ["discovering"],
-  },
-  {
-    name: "Extraction",
-    detail: "High-confidence pages are revisited to pull structured facts and evidence.",
-    matches: ["extracting"],
-  },
-  {
-    name: "Scoring",
-    detail: "The backend reconciles signals across pages and ranks source confidence.",
-    matches: ["scoring"],
-  },
-  {
-    name: "Complete",
-    detail: "The final brief is available, or the run has ended with a partial or failed state.",
-    matches: ["completed", "partial", "failed"],
-  },
-] as const;
+const defaultDraftForm = (clientName: string): DraftFormState => ({
+  goal: "resonance",
+  draftCount: "3",
+  targetLength: "medium",
+  styleConstraints: "Technical, specific, and evidence-led.",
+  personaConstraints: "Do not imitate or impersonate the target.",
+  clientName,
+  clientProfileText: '{\n  "current_role": "Engineering leader",\n  "interests": ["platform engineering", "AI operations"]\n}',
+  requestedAnglesText: "client_voice, expert_commentary",
+});
 
-function compactObject(value: Record<string, unknown> | null) {
-  return value ? JSON.stringify(value, null, 2) : null;
+const initialRunForm: RunFormState = {
+  sourceUrl: "https://example.com",
+  goal: "Inspect this source and return a structured extraction result.",
+};
+
+function makeWorkspaceId() {
+  return `workspace-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function normalizeNullable(value: string) {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeResearchPayload(form: MissionComposerState): ResearchJobCreate {
+  return {
+    candidate_name: form.candidateName.trim(),
+    company_name: normalizeNullable(form.companyName),
+    company_domain: normalizeNullable(form.companyDomain),
+    role_title: normalizeNullable(form.roleTitle),
+    search_context: normalizeNullable(form.searchContext),
+  };
+}
+
+function parseJsonText(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return JSON.parse(trimmed) as Record<string, unknown>;
+}
+
+function parseRequestedAngles(value: string) {
+  const items = value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return items.length > 0 ? items : null;
+}
+
+function buildDraftPayload(form: DraftFormState): BlogDraftJobCreate {
+  return {
+    goal: form.goal.trim() || "resonance",
+    draft_count: Math.max(Number.parseInt(form.draftCount, 10) || 1, 1),
+    target_length: form.targetLength.trim() || "medium",
+    style_constraints: normalizeNullable(form.styleConstraints),
+    persona_constraints: normalizeNullable(form.personaConstraints),
+    client_name: normalizeNullable(form.clientName),
+    client_profile: parseJsonText(form.clientProfileText),
+    requested_angles: parseRequestedAngles(form.requestedAnglesText),
+  };
+}
+
+function createWorkspaceShell(form: MissionComposerState, researchJob: ResearchJobResponse): Workspace {
+  return {
+    id: makeWorkspaceId(),
+    createdAt: new Date().toISOString(),
+    clientName: form.clientName.trim() || "Unnamed client",
+    candidateName: form.candidateName.trim(),
+    companyName: form.companyName.trim(),
+    companyDomain: form.companyDomain.trim(),
+    roleTitle: form.roleTitle.trim(),
+    searchContext: form.searchContext.trim(),
+    researchJobId: researchJob.id,
+    researchJob,
+    sources: [],
+    opportunityJobId: null,
+    opportunityJob: null,
+    opportunities: [],
+    monitorJobId: null,
+    monitorJob: null,
+    monitorEvents: [],
+    blogDraftForm: defaultDraftForm(form.clientName.trim() || "Unnamed client"),
+    blogDraftJobId: null,
+    blogDraftJob: null,
+    blogDrafts: [],
+    personaForm: {
+      ...defaultDraftForm(form.clientName.trim() || "Unnamed client"),
+      goal: "credibility",
+      draftCount: "2",
+    },
+    personaJobId: null,
+    personaJob: null,
+    personaDrafts: [],
+    monitorForm: defaultMonitorForm,
+    actions: {},
+    lastError: null,
+  };
 }
 
 function formatDate(value: string | null) {
   if (!value) {
-    return "Not finished";
+    return "Not available";
   }
 
   return new Intl.DateTimeFormat(undefined, {
@@ -105,545 +261,1542 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
-function normalizePayload(form: IntakeState): ResearchJobCreate {
-  const toNullable = (value: string) => {
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : null;
-  };
+function compactObject(value: unknown) {
+  return value ? JSON.stringify(value, null, 2) : "No data available.";
+}
 
+function asRecord(value: unknown) {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+}
+
+function getDiscoveryInsights(job: ResearchJobResponse | null) {
+  return asRecord(asRecord(job?.final_brief_jsonb)?.discovery_insights);
+}
+
+function getResearchSummaryStatus(workspace: Workspace) {
+  return workspace.researchJob?.status ?? "idle";
+}
+
+function isResearchSettled(workspace: Workspace) {
+  const status = workspace.researchJob?.status;
+  return status ? researchTerminalStatuses.has(status) : false;
+}
+
+function isOpportunityActive(workspace: Workspace) {
+  return workspace.opportunityJob?.status ? asyncActiveStatuses.has(workspace.opportunityJob.status) : false;
+}
+
+function isMonitorActive(workspace: Workspace) {
+  return workspace.monitorJob?.status === "checking";
+}
+
+function isDraftJobActive(job: BlogDraftJobResponse | null) {
+  return job?.status ? asyncActiveStatuses.has(job.status) : false;
+}
+
+function formatPercent(value: number | null) {
+  if (value === null || Number.isNaN(value)) {
+    return "n/a";
+  }
+  return `${Math.round(value * 100)}%`;
+}
+
+function describeWorkspace(workspace: Workspace) {
+  const company = workspace.companyName || workspace.researchJob?.company_name || "Independent";
+  return `${workspace.clientName} / ${workspace.candidateName} / ${company}`;
+}
+
+function deriveWorkspaceSignal(workspace: Workspace) {
+  const researchStatus = workspace.researchJob?.status;
+  if (researchStatus === "failed") {
+    return "risk";
+  }
+  if (researchStatus === "partial") {
+    return "warning";
+  }
+  if (researchStatus === "completed") {
+    return "good";
+  }
+  if (researchStatus) {
+    return "active";
+  }
+  return "idle";
+}
+
+function toPersistedState(workspaces: Workspace[], activeWorkspaceId: string | null, activeTab: WorkspaceTab): PersistedState {
   return {
-    candidate_name: form.candidateName.trim(),
-    company_name: toNullable(form.companyName),
-    company_domain: toNullable(form.companyDomain),
-    role_title: toNullable(form.roleTitle),
-    search_context: toNullable(form.searchContext),
+    workspaces: workspaces.map((workspace) => ({
+      ...workspace,
+      actions: {},
+    })),
+    activeWorkspaceId,
+    activeTab,
   };
 }
 
-async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || `Request failed with status ${response.status}`);
+function parsePersistedState(raw: string | null): PersistedState | null {
+  if (!raw) {
+    return null;
   }
 
-  return (await response.json()) as T;
+  try {
+    const parsed = JSON.parse(raw) as PersistedState;
+    if (!Array.isArray(parsed.workspaces)) {
+      return null;
+    }
+    return {
+      workspaces: parsed.workspaces.map((workspace) => ({
+        ...workspace,
+        actions: {},
+        blogDraftForm: workspace.blogDraftForm ?? defaultDraftForm(workspace.clientName),
+        personaForm:
+          workspace.personaForm ??
+          ({
+            ...defaultDraftForm(workspace.clientName),
+            goal: "credibility",
+            draftCount: "2",
+          } as DraftFormState),
+        monitorForm: workspace.monitorForm ?? defaultMonitorForm,
+        lastError: workspace.lastError ?? null,
+      })),
+      activeWorkspaceId: parsed.activeWorkspaceId ?? null,
+      activeTab: parsed.activeTab ?? "overview",
+    };
+  } catch {
+    return null;
+  }
+}
+
+function JsonBlock({ title, value }: { title: string; value: unknown }) {
+  return (
+    <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)]">
+      <div className="border-b border-[var(--line)] px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+        {title}
+      </div>
+      <pre className="max-h-96 overflow-auto px-4 py-4 text-xs leading-6 text-[var(--text)]">
+        {compactObject(value)}
+      </pre>
+    </div>
+  );
+}
+
+function StatusPill({ label, tone = "neutral" }: { label: string; tone?: "neutral" | "good" | "warning" | "risk" | "active" }) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${
+        tone === "good"
+          ? "border-emerald-400/35 bg-emerald-400/10 text-emerald-200"
+          : tone === "warning"
+            ? "border-amber-400/35 bg-amber-400/10 text-amber-200"
+            : tone === "risk"
+              ? "border-rose-400/35 bg-rose-400/10 text-rose-200"
+              : tone === "active"
+                ? "border-cyan-400/35 bg-cyan-400/10 text-cyan-200"
+                : "border-[var(--line-strong)] bg-[var(--panel-3)] text-[var(--muted-strong)]"
+      }`}
+    >
+      {label}
+    </span>
+  );
+}
+
+function SectionCard({
+  title,
+  subtitle,
+  action,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="rounded-3xl border border-[var(--line)] bg-[var(--panel)] shadow-[0_24px_80px_rgba(2,6,23,0.32)]">
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--line)] px-5 py-4">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+            {title}
+          </p>
+          {subtitle ? <p className="mt-2 text-sm text-[var(--muted-strong)]">{subtitle}</p> : null}
+        </div>
+        {action}
+      </div>
+      <div className="px-5 py-5">{children}</div>
+    </section>
+  );
 }
 
 export default function Home() {
-  const [form, setForm] = useState<IntakeState>(initialForm);
-  const [job, setJob] = useState<ResearchJobResponse | null>(null);
-  const [sources, setSources] = useState<SourceCandidateResponse[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [composer, setComposer] = useState<MissionComposerState>(initialComposer);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>("overview");
+  const [workspaceQuery, setWorkspaceQuery] = useState("");
+  const deferredWorkspaceQuery = useDeferredValue(workspaceQuery);
+  const [isBootstrapped, setIsBootstrapped] = useState(false);
+  const [launchingWorkspace, setLaunchingWorkspace] = useState(false);
+  const [health, setHealth] = useState<BackendHealth>("checking");
+  const [runs, setRuns] = useState<RunResponse[]>([]);
+  const [runForm, setRunForm] = useState<RunFormState>(initialRunForm);
+  const [runError, setRunError] = useState<string | null>(null);
+  const [runSubmitting, setRunSubmitting] = useState(false);
+
+  const activeWorkspace = useMemo(
+    () => workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null,
+    [workspaces, activeWorkspaceId],
+  );
+
+  const filteredWorkspaces = useMemo(() => {
+    const query = deferredWorkspaceQuery.trim().toLowerCase();
+    if (!query) {
+      return workspaces;
+    }
+
+    return workspaces.filter((workspace) => describeWorkspace(workspace).toLowerCase().includes(query));
+  }, [deferredWorkspaceQuery, workspaces]);
+
+  const globalCounts = useMemo(
+    () => ({
+      total: workspaces.length,
+      activeResearch: workspaces.filter((workspace) => workspace.researchJob?.status && researchActiveStatuses.has(workspace.researchJob.status)).length,
+      monitored: workspaces.filter((workspace) => workspace.monitorJobId).length,
+      drafting: workspaces.filter((workspace) => isDraftJobActive(workspace.blogDraftJob) || isDraftJobActive(workspace.personaJob)).length,
+    }),
+    [workspaces],
+  );
+
+  const mergeWorkspace = useEffectEvent((workspaceId: string, updater: (workspace: Workspace) => Workspace) => {
+    setWorkspaces((current) =>
+      current.map((workspace) => (workspace.id === workspaceId ? updater(workspace) : workspace)),
+    );
+  });
+
+  const setWorkspaceAction = useEffectEvent((workspaceId: string, action: ActionKey, active: boolean) => {
+    mergeWorkspace(workspaceId, (workspace) => ({
+      ...workspace,
+      actions: {
+        ...workspace.actions,
+        [action]: active,
+      },
+    }));
+  });
+
+  const refreshOperations = useEffectEvent(async () => {
+    try {
+      await getHealth();
+      setHealth("healthy");
+    } catch {
+      setHealth("unreachable");
+    }
+
+    try {
+      const nextRuns = await listRuns();
+      setRuns(nextRuns.slice(0, 12));
+    } catch {
+      setRuns([]);
+    }
+  });
+
+  const refreshWorkspace = useEffectEvent(async (workspace: Workspace) => {
+    const nextState: Partial<Workspace> = {};
+
+    try {
+      if (workspace.researchJobId) {
+        const [researchJob, sources] = await Promise.all([
+          getResearchJob(workspace.researchJobId),
+          listResearchSources(workspace.researchJobId),
+        ]);
+        nextState.researchJob = researchJob;
+        nextState.sources = sources;
+      }
+
+      if (workspace.opportunityJobId) {
+        const [opportunityJob, opportunities] = await Promise.all([
+          getOpportunityJob(workspace.opportunityJobId),
+          listOpportunityItems(workspace.opportunityJobId),
+        ]);
+        nextState.opportunityJob = opportunityJob;
+        nextState.opportunities = opportunities;
+      }
+
+      if (workspace.monitorJobId) {
+        const [monitorJob, monitorEvents] = await Promise.all([
+          getMonitorJob(workspace.monitorJobId),
+          listMonitorEvents(workspace.monitorJobId),
+        ]);
+        nextState.monitorJob = monitorJob;
+        nextState.monitorEvents = monitorEvents;
+      }
+
+      if (workspace.blogDraftJobId) {
+        const [blogDraftJob, blogDrafts] = await Promise.all([
+          getBlogDraftJob(workspace.blogDraftJobId),
+          listBlogDrafts(workspace.blogDraftJobId),
+        ]);
+        nextState.blogDraftJob = blogDraftJob;
+        nextState.blogDrafts = blogDrafts;
+      }
+
+      if (workspace.personaJobId) {
+        const [personaJob, personaDrafts] = await Promise.all([
+          getPersonaPostJob(workspace.personaJobId),
+          listPersonaPostDrafts(workspace.personaJobId),
+        ]);
+        nextState.personaJob = personaJob;
+        nextState.personaDrafts = personaDrafts;
+      }
+
+      mergeWorkspace(workspace.id, (current) => ({
+        ...current,
+        ...nextState,
+        lastError: null,
+      }));
+    } catch (error) {
+      mergeWorkspace(workspace.id, (current) => ({
+        ...current,
+        lastError: error instanceof Error ? error.message : "Failed to refresh workspace state.",
+      }));
+    }
+  });
+
+  const pollLiveWorkspaces = useEffectEvent(async () => {
+    await Promise.all(
+      workspaces.map(async (workspace) => {
+        const shouldPoll =
+          (workspace.researchJob?.status && researchActiveStatuses.has(workspace.researchJob.status)) ||
+          isOpportunityActive(workspace) ||
+          isMonitorActive(workspace) ||
+          isDraftJobActive(workspace.blogDraftJob) ||
+          isDraftJobActive(workspace.personaJob);
+
+        if (shouldPoll) {
+          await refreshWorkspace(workspace);
+        }
+      }),
+    );
+  });
 
   useEffect(() => {
-    if (!job || !activeStatuses.has(job.status)) {
+    const stored = parsePersistedState(window.localStorage.getItem(STORAGE_KEY));
+    if (stored) {
+      setWorkspaces(stored.workspaces);
+      setActiveWorkspaceId(stored.activeWorkspaceId ?? stored.workspaces[0]?.id ?? null);
+      setActiveTab(stored.activeTab);
+    }
+    setIsBootstrapped(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isBootstrapped) {
       return;
     }
 
-    const intervalId = window.setInterval(async () => {
-      try {
-        const [nextJob, nextSources] = await Promise.all([
-          apiRequest<ResearchJobResponse>(`/research-jobs/${job.id}`),
-          apiRequest<SourceCandidateResponse[]>(`/research-jobs/${job.id}/sources`),
-        ]);
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(toPersistedState(workspaces, activeWorkspaceId, activeTab)),
+    );
+  }, [activeTab, activeWorkspaceId, isBootstrapped, workspaces]);
 
-        setJob(nextJob);
-        setSources(nextSources);
-      } catch (pollError) {
-        setError(
-          pollError instanceof Error ? pollError.message : "Failed to refresh job state.",
-        );
-      }
-    }, 3000);
+  useEffect(() => {
+    if (!isBootstrapped) {
+      return;
+    }
+
+    void refreshOperations();
+    void Promise.all(workspaces.map((workspace) => refreshWorkspace(workspace)));
+  }, [isBootstrapped]);
+
+  useEffect(() => {
+    if (!isBootstrapped) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void pollLiveWorkspaces();
+      void refreshOperations();
+    }, 4000);
 
     return () => window.clearInterval(intervalId);
-  }, [job]);
+  }, [isBootstrapped, pollLiveWorkspaces, refreshOperations]);
 
-  const briefJson = useMemo(() => compactObject(job?.final_brief_jsonb ?? null), [job]);
-  const errorJson = useMemo(() => compactObject(job?.error_jsonb ?? null), [job]);
-
-  const pipelineSteps = useMemo(() => {
-    const status = job?.status ?? "idle";
-
-    return pipelineDefinitions.map((step) => {
-      let state = "Queued";
-      const matchesCurrentStatus = step.matches.some((match) => match === status);
-
-      if (matchesCurrentStatus) {
-        state = terminalStatuses.has(status) && status !== "completed" ? status : "Running";
-      } else {
-        const stepIndex = pipelineDefinitions.findIndex((item) => item.name === step.name);
-        const activeIndex = pipelineDefinitions.findIndex((item) =>
-          item.matches.some((match) => match === status),
-        );
-        if (activeIndex > stepIndex || (status === "completed" && step.name !== "Complete")) {
-          state = "Complete";
-        }
-      }
-
-      if (status === "completed" && step.name === "Complete") {
-        state = "Complete";
-      }
-
-      return { ...step, state };
-    });
-  }, [job]);
-
-  async function hydrateJob(jobId: string) {
-    const [nextJob, nextSources] = await Promise.all([
-      apiRequest<ResearchJobResponse>(`/research-jobs/${jobId}`),
-      apiRequest<SourceCandidateResponse[]>(`/research-jobs/${jobId}/sources`),
-    ]);
-
-    setJob(nextJob);
-    setSources(nextSources);
-  }
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleLaunchWorkspace(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setIsSubmitting(true);
-    setError(null);
-    setSources([]);
+    setLaunchingWorkspace(true);
 
     try {
-      const payload = normalizePayload(form);
+      const payload = normalizeResearchPayload(composer);
       if (!payload.candidate_name) {
         throw new Error("Candidate name is required.");
       }
 
-      const createdJob = await apiRequest<ResearchJobResponse>("/research-jobs", {
-        method: "POST",
-        body: JSON.stringify(payload),
+      const researchJob = await createResearchJob(payload);
+      const workspace = createWorkspaceShell(composer, researchJob);
+      setWorkspaces((current) => [workspace, ...current]);
+      startTransition(() => {
+        setActiveWorkspaceId(workspace.id);
+        setActiveTab("overview");
       });
-
-      setJob(createdJob);
-      await hydrateJob(createdJob.id);
-    } catch (submitError) {
-      setJob(null);
-      setError(
-        submitError instanceof Error ? submitError.message : "Failed to create research job.",
-      );
+      await refreshWorkspace(workspace);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to launch research workspace.";
+      window.alert(message);
     } finally {
-      setIsSubmitting(false);
+      setLaunchingWorkspace(false);
     }
   }
 
-  async function handleRefresh() {
-    if (!job) {
+  async function handleResearchRefresh(workspaceId: string, researchJobId: string) {
+    setWorkspaceAction(workspaceId, "researchRefresh", true);
+    try {
+      await refreshResearchJob(researchJobId);
+      const workspace = workspaces.find((item) => item.id === workspaceId);
+      if (workspace) {
+        await refreshWorkspace(workspace);
+      }
+    } catch (error) {
+      mergeWorkspace(workspaceId, (workspace) => ({
+        ...workspace,
+        lastError: error instanceof Error ? error.message : "Failed to refresh research job.",
+      }));
+    } finally {
+      setWorkspaceAction(workspaceId, "researchRefresh", false);
+    }
+  }
+
+  async function handleOpportunityCreate(workspace: Workspace) {
+    if (!workspace.researchJobId) {
       return;
     }
 
-    setRefreshing(true);
-    setError(null);
-
+    setWorkspaceAction(workspace.id, "opportunitiesCreate", true);
     try {
-      const refreshedJob = await apiRequest<ResearchJobResponse>(
-        `/research-jobs/${job.id}/refresh`,
-        { method: "POST" },
-      );
-      setJob(refreshedJob);
-      await hydrateJob(refreshedJob.id);
-    } catch (refreshError) {
-      setError(
-        refreshError instanceof Error ? refreshError.message : "Failed to refresh job.",
-      );
+      const opportunityJob = await createOpportunityJob(workspace.researchJobId);
+      mergeWorkspace(workspace.id, (current) => ({
+        ...current,
+        opportunityJobId: opportunityJob.id,
+        opportunityJob,
+        opportunities: [],
+        lastError: null,
+      }));
+      await refreshWorkspace({
+        ...workspace,
+        opportunityJobId: opportunityJob.id,
+      });
+    } catch (error) {
+      mergeWorkspace(workspace.id, (current) => ({
+        ...current,
+        lastError: error instanceof Error ? error.message : "Failed to create opportunity job.",
+      }));
     } finally {
-      setRefreshing(false);
+      setWorkspaceAction(workspace.id, "opportunitiesCreate", false);
     }
   }
 
-  const sourceCount = sources.length;
-  const completedSources = sources.filter((source) => source.stage === "extracted").length;
+  async function handleMonitorCreate(workspace: Workspace) {
+    if (!workspace.researchJobId) {
+      return;
+    }
+
+    setWorkspaceAction(workspace.id, "monitorCreate", true);
+    try {
+      const monitorJob = await createMonitorJob(workspace.researchJobId, workspace.monitorForm);
+      mergeWorkspace(workspace.id, (current) => ({
+        ...current,
+        monitorJobId: monitorJob.id,
+        monitorJob,
+        monitorEvents: [],
+        lastError: null,
+      }));
+      await refreshWorkspace({
+        ...workspace,
+        monitorJobId: monitorJob.id,
+      });
+    } catch (error) {
+      mergeWorkspace(workspace.id, (current) => ({
+        ...current,
+        lastError: error instanceof Error ? error.message : "Failed to create monitor job.",
+      }));
+    } finally {
+      setWorkspaceAction(workspace.id, "monitorCreate", false);
+    }
+  }
+
+  async function handleMonitorRefresh(workspace: Workspace) {
+    if (!workspace.monitorJobId) {
+      return;
+    }
+
+    setWorkspaceAction(workspace.id, "monitorRefresh", true);
+    try {
+      await refreshMonitorJob(workspace.monitorJobId);
+      await refreshWorkspace(workspace);
+    } catch (error) {
+      mergeWorkspace(workspace.id, (current) => ({
+        ...current,
+        lastError: error instanceof Error ? error.message : "Failed to refresh monitor job.",
+      }));
+    } finally {
+      setWorkspaceAction(workspace.id, "monitorRefresh", false);
+    }
+  }
+
+  async function handleBlogDraftCreate(workspace: Workspace) {
+    if (!workspace.researchJobId) {
+      return;
+    }
+
+    setWorkspaceAction(workspace.id, "blogCreate", true);
+    try {
+      const payload = buildDraftPayload(workspace.blogDraftForm);
+      const blogDraftJob = await createBlogDraftJob(workspace.researchJobId, payload);
+      mergeWorkspace(workspace.id, (current) => ({
+        ...current,
+        blogDraftJobId: blogDraftJob.id,
+        blogDraftJob,
+        blogDrafts: [],
+        lastError: null,
+      }));
+      await refreshWorkspace({
+        ...workspace,
+        blogDraftJobId: blogDraftJob.id,
+      });
+    } catch (error) {
+      mergeWorkspace(workspace.id, (current) => ({
+        ...current,
+        lastError: error instanceof Error ? error.message : "Failed to create blog draft job.",
+      }));
+    } finally {
+      setWorkspaceAction(workspace.id, "blogCreate", false);
+    }
+  }
+
+  async function handleBlogDraftRefresh(workspace: Workspace) {
+    if (!workspace.blogDraftJobId) {
+      return;
+    }
+
+    setWorkspaceAction(workspace.id, "blogRefresh", true);
+    try {
+      await refreshBlogDraftJob(workspace.blogDraftJobId);
+      await refreshWorkspace(workspace);
+    } catch (error) {
+      mergeWorkspace(workspace.id, (current) => ({
+        ...current,
+        lastError: error instanceof Error ? error.message : "Failed to refresh blog draft job.",
+      }));
+    } finally {
+      setWorkspaceAction(workspace.id, "blogRefresh", false);
+    }
+  }
+
+  async function handlePersonaCreate(workspace: Workspace) {
+    if (!workspace.researchJobId) {
+      return;
+    }
+
+    setWorkspaceAction(workspace.id, "personaCreate", true);
+    try {
+      const payload = buildDraftPayload(workspace.personaForm);
+      const personaJob = await createPersonaPostJob(workspace.researchJobId, payload);
+      mergeWorkspace(workspace.id, (current) => ({
+        ...current,
+        personaJobId: personaJob.id,
+        personaJob,
+        personaDrafts: [],
+        lastError: null,
+      }));
+      await refreshWorkspace({
+        ...workspace,
+        personaJobId: personaJob.id,
+      });
+    } catch (error) {
+      mergeWorkspace(workspace.id, (current) => ({
+        ...current,
+        lastError: error instanceof Error ? error.message : "Failed to create persona post job.",
+      }));
+    } finally {
+      setWorkspaceAction(workspace.id, "personaCreate", false);
+    }
+  }
+
+  async function handlePersonaRefresh(workspace: Workspace) {
+    if (!workspace.personaJobId) {
+      return;
+    }
+
+    setWorkspaceAction(workspace.id, "personaRefresh", true);
+    try {
+      await refreshPersonaPostJob(workspace.personaJobId);
+      await refreshWorkspace(workspace);
+    } catch (error) {
+      mergeWorkspace(workspace.id, (current) => ({
+        ...current,
+        lastError: error instanceof Error ? error.message : "Failed to refresh persona post job.",
+      }));
+    } finally {
+      setWorkspaceAction(workspace.id, "personaRefresh", false);
+    }
+  }
+
+  async function handleCreateRun(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setRunSubmitting(true);
+    setRunError(null);
+
+    try {
+      await createRun({
+        source_url: runForm.sourceUrl.trim(),
+        goal: runForm.goal.trim(),
+      });
+      await refreshOperations();
+    } catch (error) {
+      setRunError(error instanceof Error ? error.message : "Failed to create run.");
+    } finally {
+      setRunSubmitting(false);
+    }
+  }
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(252,192,116,0.35),_transparent_36%),radial-gradient(circle_at_82%_18%,_rgba(81,112,255,0.2),_transparent_28%),linear-gradient(180deg,_#f5efe6_0%,_#f3f7fb_50%,_#eef2f6_100%)] text-slate-950">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 py-6 sm:px-6 lg:px-8">
-        <section className="overflow-hidden rounded-[32px] border border-white/70 bg-[linear-gradient(135deg,_rgba(16,24,40,0.96),_rgba(24,37,57,0.92))] px-6 py-8 text-white shadow-[0_30px_80px_rgba(15,23,42,0.18)] sm:px-8 lg:px-10">
-          <div className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr]">
-            <div className="space-y-6">
-              <div className="inline-flex items-center rounded-full border border-white/15 bg-white/8 px-3 py-1 text-xs font-medium tracking-[0.2em] text-white/72 uppercase">
-                AI Interviewer Research Agent
-              </div>
-              <div className="space-y-4">
-                <h1 className="max-w-3xl text-4xl font-semibold tracking-[-0.04em] sm:text-5xl lg:text-6xl">
-                  Prep for the person behind the interview, not just the role.
-                </h1>
-                <p className="max-w-2xl text-base leading-7 text-slate-200 sm:text-lg">
-                  The frontend now submits real research jobs to the FastAPI backend and
-                  streams the state back into this dashboard.
-                </p>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-3xl border border-white/12 bg-white/6 p-4 backdrop-blur">
-                  <p className="text-sm text-slate-300">Discovered sources</p>
-                  <p className="mt-3 text-3xl font-semibold">{sourceCount}</p>
-                  <p className="mt-2 text-sm text-slate-400">
-                    Live count from `GET /research-jobs/:id/sources`.
-                  </p>
-                </div>
-                <div className="rounded-3xl border border-white/12 bg-white/6 p-4 backdrop-blur">
-                  <p className="text-sm text-slate-300">Extracted sources</p>
-                  <p className="mt-3 text-3xl font-semibold">{completedSources}</p>
-                  <p className="mt-2 text-sm text-slate-400">
-                    Sources with extracted evidence ready for scoring.
-                  </p>
-                </div>
-                <div className="rounded-3xl border border-white/12 bg-white/6 p-4 backdrop-blur">
-                  <p className="text-sm text-slate-300">Job status</p>
-                  <p className="mt-3 text-3xl font-semibold capitalize">
-                    {job?.status ?? "idle"}
-                  </p>
-                  <p className="mt-2 text-sm text-slate-400">
-                    Polls every 3 seconds while the backend is still working.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-[28px] border border-white/12 bg-white/8 p-5 backdrop-blur-xl">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm font-medium text-slate-200">Live job view</p>
-                  <h2 className="mt-1 text-2xl font-semibold tracking-[-0.03em]">
-                    Research status
-                  </h2>
-                </div>
-                <span className="rounded-full bg-emerald-400/18 px-3 py-1 text-xs font-medium text-emerald-200">
-                  {job ? job.id.slice(0, 8) : "No job"}
-                </span>
-              </div>
-              <div className="mt-5 space-y-4">
-                {pipelineSteps.map((step, index) => (
-                  <div
-                    key={step.name}
-                    className="rounded-2xl border border-white/10 bg-slate-950/18 p-4"
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <div className="flex items-center gap-3">
-                          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-xs font-semibold text-slate-100">
-                            {index + 1}
-                          </span>
-                          <h3 className="text-base font-semibold text-white">{step.name}</h3>
-                        </div>
-                        <p className="mt-3 text-sm leading-6 text-slate-300">
-                          {step.detail}
-                        </p>
-                      </div>
-                      <span
-                        className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${
-                          step.state === "Complete"
-                            ? "bg-emerald-300/20 text-emerald-100"
-                            : step.state === "Running"
-                              ? "bg-amber-300/18 text-amber-100"
-                              : step.state === "failed"
-                                ? "bg-rose-300/20 text-rose-100"
-                                : "bg-white/10 text-slate-200"
-                        }`}
-                      >
-                        {step.state}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="grid gap-8 lg:grid-cols-[0.95fr_1.05fr]">
-          <form
-            onSubmit={handleSubmit}
-            className="rounded-[28px] border border-slate-200/80 bg-white/82 p-6 shadow-[0_24px_60px_rgba(148,163,184,0.16)] backdrop-blur sm:p-7"
-          >
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-medium text-slate-500">Input form</p>
-                <h2 className="mt-1 text-2xl font-semibold tracking-[-0.03em]">
-                  Research request
-                </h2>
-              </div>
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="rounded-full bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-              >
-                {isSubmitting ? "Submitting..." : "Run research"}
-              </button>
-            </div>
-
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              <label className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                <span className="text-sm font-medium text-slate-700">Candidate name</span>
-                <input
-                  required
-                  value={form.candidateName}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, candidateName: event.target.value }))
-                  }
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none"
-                />
-                <span className="text-xs leading-5 text-slate-500">
-                  Required. This maps to `candidate_name`.
-                </span>
-              </label>
-
-              <label className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                <span className="text-sm font-medium text-slate-700">Company name</span>
-                <input
-                  value={form.companyName}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, companyName: event.target.value }))
-                  }
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none"
-                />
-                <span className="text-xs leading-5 text-slate-500">
-                  Optional, but it improves identity resolution.
-                </span>
-              </label>
-
-              <label className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                <span className="text-sm font-medium text-slate-700">Company domain</span>
-                <input
-                  value={form.companyDomain}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, companyDomain: event.target.value }))
-                  }
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none"
-                />
-                <span className="text-xs leading-5 text-slate-500">
-                  Optional. Example: `example.com`.
-                </span>
-              </label>
-
-              <label className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                <span className="text-sm font-medium text-slate-700">Role title</span>
-                <input
-                  value={form.roleTitle}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, roleTitle: event.target.value }))
-                  }
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none"
-                />
-                <span className="text-xs leading-5 text-slate-500">
-                  Optional. Helps infer the likely interview angle.
-                </span>
-              </label>
-            </div>
-
-            <label className="mt-4 flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-              <span className="text-sm font-medium text-slate-700">Search context</span>
-              <textarea
-                value={form.searchContext}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, searchContext: event.target.value }))
-                }
-                rows={5}
-                className="resize-none rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm leading-6 text-slate-900 outline-none"
-              />
-              <span className="text-xs leading-5 text-slate-500">
-                Optional context that the backend can use to shape the research.
-              </span>
-            </label>
-
-            <div className="mt-6 grid gap-3 rounded-3xl bg-slate-950 p-5 text-slate-50">
-              <div className="flex items-center justify-between gap-4">
-                <h3 className="text-lg font-semibold">API configuration</h3>
-                <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-slate-200">
-                  Browser client
-                </span>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 font-mono text-sm text-slate-300">
-                {API_BASE_URL}
-              </div>
-              <p className="text-sm leading-6 text-slate-300">
-                Override with `NEXT_PUBLIC_API_BASE_URL` if your backend is not on
-                `http://localhost:8000`.
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.16),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(34,197,94,0.09),_transparent_22%),linear-gradient(180deg,_#06101f_0%,_#081423_36%,_#0b1524_100%)] text-[var(--text)]">
+      <div className="mx-auto flex min-h-screen w-full max-w-[1760px] flex-col gap-6 px-4 py-5 sm:px-6 xl:px-8">
+        <header className="rounded-[32px] border border-[var(--line)] bg-[linear-gradient(135deg,rgba(9,19,33,0.98),rgba(7,15,27,0.9))] px-6 py-5 shadow-[0_28px_120px_rgba(2,6,23,0.48)]">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--muted)]">
+                Big Fish / Small Fish
+              </p>
+              <h1 className="mt-3 font-display text-4xl tracking-[-0.05em] text-white sm:text-5xl">
+                Target Operations Console
+              </h1>
+              <p className="mt-3 max-w-4xl text-sm leading-7 text-[var(--muted-strong)]">
+                Multi-client, multi-target mission control for research, opportunity ranking,
+                monitoring, long-form drafts, persona posts, health checks, and low-level TinyFish runs.
               </p>
             </div>
 
-            {error ? (
-              <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
-                {error}
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] px-4 py-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">Workspaces</p>
+                <p className="mt-2 text-2xl font-semibold text-white">{globalCounts.total}</p>
               </div>
-            ) : null}
-          </form>
+              <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] px-4 py-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">Live research</p>
+                <p className="mt-2 text-2xl font-semibold text-white">{globalCounts.activeResearch}</p>
+              </div>
+              <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] px-4 py-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">Monitors</p>
+                <p className="mt-2 text-2xl font-semibold text-white">{globalCounts.monitored}</p>
+              </div>
+              <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] px-4 py-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">Draft jobs</p>
+                <p className="mt-2 text-2xl font-semibold text-white">{globalCounts.drafting}</p>
+              </div>
+            </div>
+          </div>
+        </header>
 
-          <div className="space-y-8">
-            <section className="rounded-[28px] border border-slate-200/80 bg-white/84 p-6 shadow-[0_24px_60px_rgba(148,163,184,0.16)] backdrop-blur sm:p-7">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <p className="text-sm font-medium text-slate-500">MVP output</p>
-                  <h2 className="mt-1 text-2xl font-semibold tracking-[-0.03em]">
-                    Interviewer prep brief
-                  </h2>
+        <div className="grid flex-1 gap-6 xl:grid-cols-[340px_minmax(0,1fr)_340px]">
+          <aside className="space-y-6">
+            <SectionCard
+              title="New Mission"
+              subtitle="Launch a fresh client-target workspace. Each workspace persists locally and polls its own backend jobs."
+            >
+              <form className="space-y-4" onSubmit={handleLaunchWorkspace}>
+                <Input
+                  label="Client"
+                  value={composer.clientName}
+                  onChange={(value) => setComposer((current) => ({ ...current, clientName: value }))}
+                />
+                <Input
+                  label="Target"
+                  value={composer.candidateName}
+                  onChange={(value) => setComposer((current) => ({ ...current, candidateName: value }))}
+                />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Input
+                    label="Company"
+                    value={composer.companyName}
+                    onChange={(value) => setComposer((current) => ({ ...current, companyName: value }))}
+                  />
+                  <Input
+                    label="Domain"
+                    value={composer.companyDomain}
+                    onChange={(value) => setComposer((current) => ({ ...current, companyDomain: value }))}
+                  />
                 </div>
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    type="button"
-                    onClick={handleRefresh}
-                    disabled={!job || refreshing}
-                    className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {refreshing ? "Refreshing..." : "Requeue / Refresh"}
-                  </button>
-                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-                    Finished: <span className="font-semibold">{formatDate(job?.finished_at ?? null)}</span>
-                  </div>
+                <Input
+                  label="Role"
+                  value={composer.roleTitle}
+                  onChange={(value) => setComposer((current) => ({ ...current, roleTitle: value }))}
+                />
+                <TextArea
+                  label="Search context"
+                  rows={4}
+                  value={composer.searchContext}
+                  onChange={(value) => setComposer((current) => ({ ...current, searchContext: value }))}
+                />
+                <button
+                  type="submit"
+                  disabled={launchingWorkspace}
+                  className="w-full rounded-2xl border border-cyan-400/40 bg-cyan-400/12 px-4 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/18 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {launchingWorkspace ? "Launching..." : "Launch Research Workspace"}
+                </button>
+              </form>
+            </SectionCard>
+
+            <SectionCard
+              title="Workspace Registry"
+              subtitle="Filter and switch between simultaneous client-target missions."
+              action={<StatusPill label={`${filteredWorkspaces.length} visible`} tone="active" />}
+            >
+              <div className="space-y-4">
+                <Input label="Filter" value={workspaceQuery} onChange={setWorkspaceQuery} />
+                <div className="space-y-3">
+                  {filteredWorkspaces.length > 0 ? (
+                    filteredWorkspaces.map((workspace) => (
+                      <button
+                        key={workspace.id}
+                        type="button"
+                        onClick={() =>
+                          startTransition(() => {
+                            setActiveWorkspaceId(workspace.id);
+                          })
+                        }
+                        className={`w-full rounded-2xl border px-4 py-4 text-left transition ${
+                          activeWorkspaceId === workspace.id
+                            ? "border-cyan-400/40 bg-cyan-400/10"
+                            : "border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--line-strong)]"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+                              {workspace.clientName}
+                            </p>
+                            <h2 className="mt-2 text-base font-semibold text-white">{workspace.candidateName}</h2>
+                            <p className="mt-1 text-sm text-[var(--muted-strong)]">
+                              {workspace.companyName || "Independent"} {workspace.roleTitle ? `· ${workspace.roleTitle}` : ""}
+                            </p>
+                          </div>
+                          <StatusPill
+                            label={getResearchSummaryStatus(workspace)}
+                            tone={deriveWorkspaceSignal(workspace)}
+                          />
+                        </div>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {workspace.opportunityJobId ? <StatusPill label="opps" tone="active" /> : null}
+                          {workspace.monitorJobId ? <StatusPill label="monitor" tone="good" /> : null}
+                          {workspace.blogDraftJobId ? <StatusPill label="blog" tone="warning" /> : null}
+                          {workspace.personaJobId ? <StatusPill label="persona" tone="warning" /> : null}
+                        </div>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-[var(--line-strong)] bg-[var(--panel-2)] px-4 py-5 text-sm leading-7 text-[var(--muted-strong)]">
+                      No workspaces match the current filter.
+                    </div>
+                  )}
                 </div>
               </div>
+            </SectionCard>
+          </aside>
 
-              {job ? (
-                <div className="mt-6 space-y-6">
-                  <div className="grid gap-4 md:grid-cols-[1.1fr_0.9fr]">
-                    <div className="rounded-3xl bg-slate-950 p-5 text-slate-50">
-                      <p className="text-sm text-slate-400">Job subject</p>
-                      <h3 className="mt-2 text-3xl font-semibold tracking-[-0.04em]">
-                        {job.candidate_name}
-                      </h3>
-                      <p className="mt-2 text-lg text-slate-200">
-                        {job.role_title ?? "Role not provided"}
-                        {job.company_name ? ` at ${job.company_name}` : ""}
+          <section className="space-y-6">
+            {activeWorkspace ? (
+              <>
+                <SectionCard
+                  title="Active Mission"
+                  subtitle={describeWorkspace(activeWorkspace)}
+                  action={
+                    <div className="flex flex-wrap gap-2">
+                      <StatusPill label={activeWorkspace.clientName} tone="neutral" />
+                      <StatusPill
+                        label={activeWorkspace.researchJob?.status ?? "idle"}
+                        tone={deriveWorkspaceSignal(activeWorkspace)}
+                      />
+                    </div>
+                  }
+                >
+                  <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+                    <div className="rounded-3xl border border-[var(--line)] bg-[var(--panel-2)] p-5">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">Target brief</p>
+                      <h2 className="mt-2 font-display text-3xl tracking-[-0.04em] text-white">
+                        {activeWorkspace.candidateName}
+                      </h2>
+                      <p className="mt-2 text-sm text-[var(--muted-strong)]">
+                        {activeWorkspace.roleTitle || "Role not specified"}
+                        {activeWorkspace.companyName ? ` at ${activeWorkspace.companyName}` : ""}
                       </p>
-                      <p className="mt-4 text-sm leading-6 text-slate-300">
-                        {job.search_context ?? "No extra search context was provided."}
+                      <p className="mt-4 max-w-3xl text-sm leading-7 text-[var(--muted-strong)]">
+                        {activeWorkspace.searchContext || "No additional search context supplied."}
                       </p>
                       <div className="mt-5 flex flex-wrap gap-2">
-                        {[job.status, job.company_domain ?? "no-domain", job.id.slice(0, 8)].map(
-                          (tag) => (
-                            <span
-                              key={tag}
-                              className="rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs text-slate-100"
+                        <StatusPill label={`job ${activeWorkspace.researchJobId?.slice(0, 8) ?? "pending"}`} tone="active" />
+                        <StatusPill label={`${activeWorkspace.sources.length} sources`} tone="neutral" />
+                        <StatusPill label={`created ${formatDate(activeWorkspace.createdAt)}`} tone="neutral" />
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-1">
+                      <SignalCard label="Research" value={activeWorkspace.researchJob?.status ?? "idle"} />
+                      <SignalCard label="Opportunity items" value={String(activeWorkspace.opportunities.length)} />
+                      <SignalCard label="Monitor events" value={String(activeWorkspace.monitorEvents.length)} />
+                      <SignalCard
+                        label="Draft outputs"
+                        value={String(activeWorkspace.blogDrafts.length + activeWorkspace.personaDrafts.length)}
+                      />
+                    </div>
+                  </div>
+
+                  {activeWorkspace.lastError ? (
+                    <div className="mt-5 rounded-2xl border border-rose-400/30 bg-rose-400/8 px-4 py-3 text-sm text-rose-100">
+                      {activeWorkspace.lastError}
+                    </div>
+                  ) : null}
+
+                  <div className="mt-5 flex flex-wrap gap-3 border-t border-[var(--line)] pt-5">
+                    {workspaceTabs.map((tab) => (
+                      <button
+                        key={tab}
+                        type="button"
+                        onClick={() => setActiveTab(tab)}
+                        className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition ${
+                          activeTab === tab
+                            ? "border-cyan-400/40 bg-cyan-400/12 text-cyan-100"
+                            : "border-[var(--line)] bg-[var(--panel-2)] text-[var(--muted-strong)] hover:border-[var(--line-strong)]"
+                        }`}
+                      >
+                        {tab}
+                      </button>
+                    ))}
+                  </div>
+                </SectionCard>
+
+                {activeTab === "overview" ? (
+                  <div className="grid gap-6 2xl:grid-cols-2">
+                    <SectionCard
+                      title="Control Plane"
+                      subtitle="Use these actions to move the active workspace through each backend workflow."
+                    >
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <ActionButton
+                          label="Refresh Research"
+                          detail="POST /research-jobs/:id/refresh"
+                          disabled={!activeWorkspace.researchJobId || activeWorkspace.actions.researchRefresh}
+                          onClick={() =>
+                            activeWorkspace.researchJobId
+                              ? handleResearchRefresh(activeWorkspace.id, activeWorkspace.researchJobId)
+                              : undefined
+                          }
+                        />
+                        <ActionButton
+                          label="Generate Opportunities"
+                          detail="POST /research-jobs/:id/opportunities"
+                          disabled={!isResearchSettled(activeWorkspace) || activeWorkspace.actions.opportunitiesCreate}
+                          onClick={() => handleOpportunityCreate(activeWorkspace)}
+                        />
+                        <ActionButton
+                          label="Create Monitor"
+                          detail="POST /research-jobs/:id/monitor"
+                          disabled={!isResearchSettled(activeWorkspace) || activeWorkspace.actions.monitorCreate}
+                          onClick={() => handleMonitorCreate(activeWorkspace)}
+                        />
+                        <ActionButton
+                          label="Refresh Monitor"
+                          detail="POST /monitor-jobs/:id/refresh"
+                          disabled={!activeWorkspace.monitorJobId || activeWorkspace.actions.monitorRefresh}
+                          onClick={() => handleMonitorRefresh(activeWorkspace)}
+                        />
+                        <ActionButton
+                          label="Create Blog Drafts"
+                          detail="POST /research-jobs/:id/blog-drafts"
+                          disabled={!isResearchSettled(activeWorkspace) || activeWorkspace.actions.blogCreate}
+                          onClick={() => handleBlogDraftCreate(activeWorkspace)}
+                        />
+                        <ActionButton
+                          label="Create Persona Posts"
+                          detail="POST /research-jobs/:id/persona-post-jobs"
+                          disabled={!isResearchSettled(activeWorkspace) || activeWorkspace.actions.personaCreate}
+                          onClick={() => handlePersonaCreate(activeWorkspace)}
+                        />
+                      </div>
+                    </SectionCard>
+
+                    <SectionCard
+                      title="Brief Highlights"
+                      subtitle="The frontend now breaks out the structured research outputs instead of only showing raw JSON."
+                    >
+                      <div className="grid gap-4">
+                        <InsightGroup
+                          title="Expertise Themes"
+                          items={asStringList(asRecord(activeWorkspace.researchJob?.final_brief_jsonb)?.expertise_themes)}
+                        />
+                        <InsightGroup
+                          title="Public Interest Signals"
+                          items={asNamedList(
+                            getDiscoveryInsights(activeWorkspace.researchJob),
+                            "public_interest_signals",
+                            "interest",
+                          )}
+                        />
+                        <InsightGroup
+                          title="Safe Content Angles"
+                          items={asNamedList(
+                            getDiscoveryInsights(activeWorkspace.researchJob),
+                            "safe_content_angles",
+                            "angle",
+                          )}
+                        />
+                        <InsightGroup
+                          title="Guardrails"
+                          items={asStringList(getDiscoveryInsights(activeWorkspace.researchJob)?.guardrails)}
+                        />
+                      </div>
+                    </SectionCard>
+                  </div>
+                ) : null}
+
+                {activeTab === "research" ? (
+                  <div className="space-y-6">
+                    <SectionCard
+                      title="Research Output"
+                      subtitle="Structured job metadata, final brief, source evidence, and failure payloads."
+                      action={
+                        <button
+                          type="button"
+                          onClick={() =>
+                            activeWorkspace.researchJobId
+                              ? handleResearchRefresh(activeWorkspace.id, activeWorkspace.researchJobId)
+                              : undefined
+                          }
+                          disabled={!activeWorkspace.researchJobId || activeWorkspace.actions.researchRefresh}
+                          className="rounded-2xl border border-[var(--line-strong)] bg-[var(--panel-2)] px-4 py-2 text-sm font-semibold text-[var(--muted-strong)] transition hover:border-cyan-400/35 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {activeWorkspace.actions.researchRefresh ? "Refreshing..." : "Refresh Research"}
+                        </button>
+                      }
+                    >
+                      <div className="grid gap-4 xl:grid-cols-2">
+                        <JsonBlock title="Final Brief JSON" value={activeWorkspace.researchJob?.final_brief_jsonb} />
+                        <JsonBlock title="Error JSON" value={activeWorkspace.researchJob?.error_jsonb} />
+                      </div>
+                    </SectionCard>
+
+                    <SectionCard
+                      title="Source Matrix"
+                      subtitle="Every discovered or extracted source stays attached to the workspace."
+                    >
+                      <div className="space-y-4">
+                        {activeWorkspace.sources.length > 0 ? (
+                          activeWorkspace.sources.map((source) => (
+                            <article
+                              key={source.id}
+                              className="rounded-3xl border border-[var(--line)] bg-[var(--panel-2)] p-5"
                             >
-                              {tag}
-                            </span>
-                          ),
+                              <div className="flex flex-wrap items-start justify-between gap-4">
+                                <div>
+                                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+                                    {source.source_type ?? source.stage}
+                                  </p>
+                                  <h3 className="mt-2 text-lg font-semibold text-white">
+                                    {source.title ?? source.normalized_url ?? source.url}
+                                  </h3>
+                                  <p className="mt-2 break-all text-sm text-[var(--muted-strong)]">{source.url}</p>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  <StatusPill label={`confidence ${formatPercent(source.confidence)}`} tone="active" />
+                                  <StatusPill label={`rank ${formatPercent(source.ranking_score)}`} tone="neutral" />
+                                  <StatusPill label={source.stage} tone="neutral" />
+                                </div>
+                              </div>
+                              {source.evidence_jsonb ? (
+                                <pre className="mt-4 overflow-auto rounded-2xl border border-[var(--line)] bg-[var(--panel-3)] px-4 py-4 text-xs leading-6 text-[var(--muted-strong)]">
+                                  {JSON.stringify(source.evidence_jsonb, null, 2)}
+                                </pre>
+                              ) : null}
+                            </article>
+                          ))
+                        ) : (
+                          <EmptyState message="No source evidence has arrived yet for this workspace." />
                         )}
                       </div>
-                    </div>
+                    </SectionCard>
+                  </div>
+                ) : null}
 
-                    <div className="grid gap-3">
-                      {[
-                        { label: "Status", value: job.status },
-                        { label: "Created", value: formatDate(job.created_at) },
-                        { label: "Updated", value: formatDate(job.updated_at) },
-                        { label: "Sources", value: String(sourceCount) },
-                      ].map((signal) => (
-                        <div
-                          key={signal.label}
-                          className="rounded-3xl border border-slate-200 bg-slate-50/90 p-4"
+                {activeTab === "opportunities" ? (
+                  <div className="space-y-6">
+                    <SectionCard
+                      title="Opportunity Engine"
+                      subtitle="Rank next-best actions for the client from current public evidence."
+                      action={
+                        <button
+                          type="button"
+                          onClick={() => handleOpportunityCreate(activeWorkspace)}
+                          disabled={!isResearchSettled(activeWorkspace) || activeWorkspace.actions.opportunitiesCreate}
+                          className="rounded-2xl border border-emerald-400/35 bg-emerald-400/10 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-400/16 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          <p className="text-sm text-slate-500">{signal.label}</p>
-                          <p className="mt-3 text-lg font-semibold text-slate-900 capitalize">
-                            {signal.value}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="grid gap-6 xl:grid-cols-2">
-                    <div>
-                      <h3 className="text-lg font-semibold text-slate-950">Final brief JSON</h3>
-                      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-950 p-4 text-sm leading-6 text-slate-100">
-                        <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono">
-                          {briefJson ?? "No final brief returned yet."}
-                        </pre>
-                      </div>
-                    </div>
-
-                    <div>
-                      <h3 className="text-lg font-semibold text-slate-950">Error JSON</h3>
-                      <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700 shadow-sm">
-                        <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono">
-                          {errorJson ?? "No backend error payload."}
-                        </pre>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="mt-6 rounded-3xl border border-dashed border-slate-300 bg-slate-50/80 p-6 text-sm leading-6 text-slate-600">
-                  Submit a research request to create a backend job and populate this panel.
-                </div>
-              )}
-            </section>
-
-            <section className="rounded-[28px] border border-slate-200/80 bg-white/84 p-6 shadow-[0_24px_60px_rgba(148,163,184,0.16)] backdrop-blur sm:p-7">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm font-medium text-slate-500">Evidence cards</p>
-                  <h2 className="mt-1 text-2xl font-semibold tracking-[-0.03em]">
-                    Source review
-                  </h2>
-                </div>
-                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
-                  Live backend data
-                </span>
-              </div>
-              <div className="mt-6 space-y-4">
-                {sources.length > 0 ? (
-                  sources.map((source) => (
-                    <article
-                      key={source.id}
-                      className="rounded-3xl border border-slate-200 bg-[linear-gradient(180deg,_rgba(255,255,255,0.98),_rgba(248,250,252,0.98))] p-5"
+                          {activeWorkspace.actions.opportunitiesCreate ? "Generating..." : "Generate Opportunity Run"}
+                        </button>
+                      }
                     >
-                      <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div className="grid gap-4 xl:grid-cols-2">
+                        <JsonBlock title="Job Summary" value={activeWorkspace.opportunityJob?.summary_jsonb} />
+                        <JsonBlock title="Job Error" value={activeWorkspace.opportunityJob?.error_jsonb} />
+                      </div>
+                    </SectionCard>
+
+                    <div className="grid gap-4">
+                      {activeWorkspace.opportunities.length > 0 ? (
+                        activeWorkspace.opportunities.map((opportunity) => (
+                          <article
+                            key={opportunity.id}
+                            className="rounded-3xl border border-[var(--line)] bg-[var(--panel)] p-5"
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-4">
+                              <div>
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+                                  {opportunity.type.replaceAll("_", " ")}
+                                </p>
+                                <h3 className="mt-2 text-xl font-semibold text-white">{opportunity.title}</h3>
+                                <p className="mt-3 max-w-4xl text-sm leading-7 text-[var(--muted-strong)]">
+                                  {opportunity.description}
+                                </p>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <StatusPill label={`priority ${formatPercent(opportunity.priority_score)}`} tone="good" />
+                                <StatusPill label={`impact ${formatPercent(opportunity.estimated_impact)}`} tone="active" />
+                                <StatusPill label={`effort ${formatPercent(opportunity.estimated_effort)}`} tone="warning" />
+                              </div>
+                            </div>
+                            <div className="mt-4 grid gap-4 lg:grid-cols-3">
+                              <MiniDatum label="Theme" value={opportunity.theme ?? "n/a"} />
+                              <MiniDatum label="Recommended asset" value={opportunity.recommended_asset_type ?? "n/a"} />
+                              <MiniDatum label="Target URL" value={opportunity.target_url ?? "No direct surface"} />
+                            </div>
+                            {opportunity.why_now ? (
+                              <p className="mt-4 text-sm leading-7 text-[var(--muted-strong)]">{opportunity.why_now}</p>
+                            ) : null}
+                          </article>
+                        ))
+                      ) : (
+                        <EmptyState message="No opportunity items yet. Generate an opportunity run after research settles." />
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+
+                {activeTab === "monitoring" ? (
+                  <div className="space-y-6">
+                    <SectionCard
+                      title="Monitoring"
+                      subtitle="Track deltas against a research snapshot and surface new follow-up actions."
+                      action={
+                        <div className="flex flex-wrap gap-3">
+                          <button
+                            type="button"
+                            onClick={() => handleMonitorCreate(activeWorkspace)}
+                            disabled={!isResearchSettled(activeWorkspace) || activeWorkspace.actions.monitorCreate}
+                            className="rounded-2xl border border-cyan-400/35 bg-cyan-400/10 px-4 py-2 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/16 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {activeWorkspace.actions.monitorCreate ? "Creating..." : "Capture Monitor Baseline"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleMonitorRefresh(activeWorkspace)}
+                            disabled={!activeWorkspace.monitorJobId || activeWorkspace.actions.monitorRefresh}
+                            className="rounded-2xl border border-[var(--line-strong)] bg-[var(--panel-2)] px-4 py-2 text-sm font-semibold text-[var(--muted-strong)] transition hover:border-cyan-400/35 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {activeWorkspace.actions.monitorRefresh ? "Refreshing..." : "Run Monitor Refresh"}
+                          </button>
+                        </div>
+                      }
+                    >
+                      <div className="grid gap-4 lg:grid-cols-2">
+                        <div className="space-y-4">
+                          <Input
+                            label="Cadence"
+                            value={activeWorkspace.monitorForm.cadence}
+                            onChange={(value) =>
+                              mergeWorkspace(activeWorkspace.id, (workspace) => ({
+                                ...workspace,
+                                monitorForm: {
+                                  ...workspace.monitorForm,
+                                  cadence: value,
+                                },
+                              }))
+                            }
+                          />
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <SignalCard label="Status" value={activeWorkspace.monitorJob?.status ?? "idle"} />
+                            <SignalCard label="Last checked" value={formatDate(activeWorkspace.monitorJob?.last_checked_at ?? null)} />
+                          </div>
+                        </div>
+                        <JsonBlock title="Monitor Summary" value={activeWorkspace.monitorJob?.summary_jsonb} />
+                      </div>
+                    </SectionCard>
+
+                    <SectionCard title="Event Timeline" subtitle="Detected changes and recommended follow-up actions.">
+                      <div className="space-y-4">
+                        {activeWorkspace.monitorEvents.length > 0 ? (
+                          activeWorkspace.monitorEvents.map((event) => (
+                            <article
+                              key={event.id}
+                              className="rounded-3xl border border-[var(--line)] bg-[var(--panel-2)] p-5"
+                            >
+                              <div className="flex flex-wrap items-start justify-between gap-4">
+                                <div>
+                                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+                                    {event.event_type.replaceAll("_", " ")}
+                                  </p>
+                                  <p className="mt-2 text-base font-semibold text-white">{event.change_summary}</p>
+                                </div>
+                                <StatusPill label={`confidence ${formatPercent(event.confidence)}`} tone="active" />
+                              </div>
+                              {event.recommended_followup ? (
+                                <p className="mt-3 text-sm leading-7 text-[var(--muted-strong)]">
+                                  {event.recommended_followup}
+                                </p>
+                              ) : null}
+                              {event.source_url ? (
+                                <p className="mt-3 break-all text-xs text-[var(--muted)]">{event.source_url}</p>
+                              ) : null}
+                            </article>
+                          ))
+                        ) : (
+                          <EmptyState message="No monitor events yet. Capture a baseline, then refresh to detect changes." />
+                        )}
+                      </div>
+                    </SectionCard>
+                  </div>
+                ) : null}
+
+                {activeTab === "blog" ? (
+                  <div className="space-y-6">
+                    <SectionCard
+                      title="Blog Draft Generator"
+                      subtitle="Configure and generate reviewable long-form content tied to a research workspace."
+                      action={
+                        <div className="flex flex-wrap gap-3">
+                          <button
+                            type="button"
+                            onClick={() => handleBlogDraftCreate(activeWorkspace)}
+                            disabled={!isResearchSettled(activeWorkspace) || activeWorkspace.actions.blogCreate}
+                            className="rounded-2xl border border-amber-400/35 bg-amber-400/10 px-4 py-2 text-sm font-semibold text-amber-100 transition hover:bg-amber-400/16 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {activeWorkspace.actions.blogCreate ? "Creating..." : "Generate Blog Draft Job"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleBlogDraftRefresh(activeWorkspace)}
+                            disabled={!activeWorkspace.blogDraftJobId || activeWorkspace.actions.blogRefresh}
+                            className="rounded-2xl border border-[var(--line-strong)] bg-[var(--panel-2)] px-4 py-2 text-sm font-semibold text-[var(--muted-strong)] transition hover:border-amber-400/35 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {activeWorkspace.actions.blogRefresh ? "Refreshing..." : "Refresh Draft Job"}
+                          </button>
+                        </div>
+                      }
+                    >
+                      <DraftConfigurator
+                        form={activeWorkspace.blogDraftForm}
+                        onChange={(updater) =>
+                          mergeWorkspace(activeWorkspace.id, (workspace) => ({
+                            ...workspace,
+                            blogDraftForm: updater(workspace.blogDraftForm),
+                          }))
+                        }
+                      />
+                    </SectionCard>
+
+                    <DraftResults
+                      title="Blog Draft Outputs"
+                      drafts={activeWorkspace.blogDrafts}
+                      job={activeWorkspace.blogDraftJob}
+                    />
+                  </div>
+                ) : null}
+
+                {activeTab === "persona" ? (
+                  <div className="space-y-6">
+                    <SectionCard
+                      title="Persona Posts"
+                      subtitle="Generate client-voice and expert-commentary drafts without impersonation."
+                      action={
+                        <div className="flex flex-wrap gap-3">
+                          <button
+                            type="button"
+                            onClick={() => handlePersonaCreate(activeWorkspace)}
+                            disabled={!isResearchSettled(activeWorkspace) || activeWorkspace.actions.personaCreate}
+                            className="rounded-2xl border border-violet-400/35 bg-violet-400/10 px-4 py-2 text-sm font-semibold text-violet-100 transition hover:bg-violet-400/16 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {activeWorkspace.actions.personaCreate ? "Creating..." : "Generate Persona Post Job"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handlePersonaRefresh(activeWorkspace)}
+                            disabled={!activeWorkspace.personaJobId || activeWorkspace.actions.personaRefresh}
+                            className="rounded-2xl border border-[var(--line-strong)] bg-[var(--panel-2)] px-4 py-2 text-sm font-semibold text-[var(--muted-strong)] transition hover:border-violet-400/35 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {activeWorkspace.actions.personaRefresh ? "Refreshing..." : "Refresh Persona Job"}
+                          </button>
+                        </div>
+                      }
+                    >
+                      <DraftConfigurator
+                        form={activeWorkspace.personaForm}
+                        onChange={(updater) =>
+                          mergeWorkspace(activeWorkspace.id, (workspace) => ({
+                            ...workspace,
+                            personaForm: updater(workspace.personaForm),
+                          }))
+                        }
+                      />
+                    </SectionCard>
+
+                    <DraftResults
+                      title="Persona Draft Outputs"
+                      drafts={activeWorkspace.personaDrafts}
+                      job={activeWorkspace.personaJob}
+                    />
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <SectionCard
+                title="Workspace Detail"
+                subtitle="Launch or select a mission from the left rail to inspect research and downstream jobs."
+              >
+                <EmptyState message="No active workspace selected." />
+              </SectionCard>
+            )}
+          </section>
+
+          <aside className="space-y-6">
+            <SectionCard
+              title="Backend Operations"
+              subtitle="Health, API routing, and low-level TinyFish run inspection."
+              action={
+                <StatusPill
+                  label={health === "healthy" ? "healthy" : health === "checking" ? "checking" : "unreachable"}
+                  tone={health === "healthy" ? "good" : health === "checking" ? "active" : "risk"}
+                />
+              }
+            >
+              <div className="space-y-4">
+                <MiniDatum label="API base" value={API_BASE_URL} />
+                <button
+                  type="button"
+                  onClick={() => void refreshOperations()}
+                  className="w-full rounded-2xl border border-[var(--line-strong)] bg-[var(--panel-2)] px-4 py-3 text-sm font-semibold text-[var(--muted-strong)] transition hover:border-cyan-400/35 hover:text-white"
+                >
+                  Refresh Backend Telemetry
+                </button>
+              </div>
+            </SectionCard>
+
+            <SectionCard title="Create Run" subtitle="Expose the backend `/runs` debug endpoint directly from the UI.">
+              <form className="space-y-4" onSubmit={handleCreateRun}>
+                <Input label="Source URL" value={runForm.sourceUrl} onChange={(value) => setRunForm((current) => ({ ...current, sourceUrl: value }))} />
+                <TextArea label="Goal" rows={4} value={runForm.goal} onChange={(value) => setRunForm((current) => ({ ...current, goal: value }))} />
+                <button
+                  type="submit"
+                  disabled={runSubmitting}
+                  className="w-full rounded-2xl border border-cyan-400/35 bg-cyan-400/10 px-4 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/16 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {runSubmitting ? "Submitting..." : "Create Debug Run"}
+                </button>
+                {runError ? (
+                  <div className="rounded-2xl border border-rose-400/30 bg-rose-400/8 px-4 py-3 text-sm text-rose-100">
+                    {runError}
+                  </div>
+                ) : null}
+              </form>
+            </SectionCard>
+
+            <SectionCard title="Recent Runs" subtitle="Latest responses from `GET /runs`.">
+              <div className="space-y-3">
+                {runs.length > 0 ? (
+                  runs.map((run) => (
+                    <article key={run.id} className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] p-4">
+                      <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-xs font-medium tracking-[0.16em] text-slate-500 uppercase">
-                            {source.source_type ?? source.stage}
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+                            {run.status}
                           </p>
-                          <h3 className="mt-2 text-xl font-semibold text-slate-950">
-                            {source.title ?? source.normalized_url ?? source.url}
-                          </h3>
+                          <p className="mt-2 text-sm font-semibold text-white">{run.id.slice(0, 12)}</p>
                         </div>
-                        <div className="rounded-2xl bg-slate-950 px-4 py-2 text-sm text-white">
-                          Confidence {source.confidence?.toFixed(2) ?? "n/a"}
-                        </div>
+                        <StatusPill label={run.tinyfish_run_id ? "attached" : "queued"} tone="active" />
                       </div>
-                      <p className="mt-4 break-all text-sm leading-6 text-slate-600">
-                        {source.url}
+                      <p className="mt-3 break-all text-xs leading-6 text-[var(--muted-strong)]">
+                        {run.source_url}
                       </p>
-                      <div className="mt-5 flex flex-wrap gap-3">
-                        <div className="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700">
-                          Stage: {source.stage}
-                        </div>
-                        <a
-                          href={source.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="rounded-full border border-slate-950 bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
-                        >
-                          Open source
-                        </a>
-                      </div>
-                      {source.evidence_jsonb ? (
-                        <pre className="mt-4 overflow-x-auto rounded-2xl bg-slate-50 p-4 font-mono text-xs leading-5 text-slate-700">
-                          {JSON.stringify(source.evidence_jsonb, null, 2)}
-                        </pre>
-                      ) : null}
+                      <p className="mt-3 text-xs leading-6 text-[var(--muted)]">{run.goal}</p>
                     </article>
                   ))
                 ) : (
-                  <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50/80 p-6 text-sm leading-6 text-slate-600">
-                    No sources yet. They will appear here as the backend progresses through discovery and extraction.
-                  </div>
+                  <EmptyState message="No debug runs available." />
                 )}
               </div>
-            </section>
-          </div>
-        </section>
+            </SectionCard>
+          </aside>
+        </div>
       </div>
     </main>
   );
+}
+
+function DraftConfigurator({
+  form,
+  onChange,
+}: {
+  form: DraftFormState;
+  onChange: (updater: (current: DraftFormState) => DraftFormState) => void;
+}) {
+  return (
+    <div className="grid gap-4 xl:grid-cols-2">
+      <div className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Input
+            label="Goal"
+            value={form.goal}
+            onChange={(value) => onChange((current) => ({ ...current, goal: value }))}
+          />
+          <Input
+            label="Draft count"
+            value={form.draftCount}
+            onChange={(value) => onChange((current) => ({ ...current, draftCount: value }))}
+          />
+          <Input
+            label="Length"
+            value={form.targetLength}
+            onChange={(value) => onChange((current) => ({ ...current, targetLength: value }))}
+          />
+        </div>
+        <Input
+          label="Client name"
+          value={form.clientName}
+          onChange={(value) => onChange((current) => ({ ...current, clientName: value }))}
+        />
+        <TextArea
+          label="Style constraints"
+          rows={4}
+          value={form.styleConstraints}
+          onChange={(value) => onChange((current) => ({ ...current, styleConstraints: value }))}
+        />
+        <TextArea
+          label="Persona constraints"
+          rows={4}
+          value={form.personaConstraints}
+          onChange={(value) => onChange((current) => ({ ...current, personaConstraints: value }))}
+        />
+      </div>
+      <div className="space-y-4">
+        <Input
+          label="Requested angles"
+          value={form.requestedAnglesText}
+          onChange={(value) => onChange((current) => ({ ...current, requestedAnglesText: value }))}
+        />
+        <TextArea
+          label="Client profile JSON"
+          rows={12}
+          value={form.clientProfileText}
+          onChange={(value) => onChange((current) => ({ ...current, clientProfileText: value }))}
+        />
+      </div>
+    </div>
+  );
+}
+
+function DraftResults({
+  title,
+  drafts,
+  job,
+}: {
+  title: string;
+  drafts: BlogDraftResponse[];
+  job: BlogDraftJobResponse | null;
+}) {
+  return (
+    <SectionCard title={title} subtitle="Generated outputs, resonance metadata, and evidence references.">
+      <div className="grid gap-4 xl:grid-cols-2">
+        <JsonBlock title="Job" value={job} />
+        <JsonBlock title="Resonance Profile" value={job?.resonance_profile_jsonb} />
+      </div>
+
+      <div className="mt-5 space-y-4">
+        {drafts.length > 0 ? (
+          drafts.map((draft) => (
+            <article key={draft.id} className="rounded-3xl border border-[var(--line)] bg-[var(--panel-2)] p-5">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+                    {draft.author_mode.replaceAll("_", " ")}
+                  </p>
+                  <h3 className="mt-2 text-xl font-semibold text-white">{draft.title}</h3>
+                  <p className="mt-3 max-w-4xl text-sm leading-7 text-[var(--muted-strong)]">{draft.summary}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <StatusPill label={draft.angle} tone="active" />
+                  <StatusPill label={draft.slug_suggestion ?? "no slug"} tone="neutral" />
+                </div>
+              </div>
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <JsonBlock title="Outline" value={draft.outline_jsonb} />
+                <JsonBlock title="Quality" value={draft.quality_jsonb} />
+              </div>
+              <div className="mt-4 rounded-2xl border border-[var(--line)] bg-[var(--panel-3)] px-4 py-4 text-sm leading-7 text-[var(--text)] whitespace-pre-wrap">
+                {draft.body_markdown}
+              </div>
+            </article>
+          ))
+        ) : (
+          <EmptyState message="No generated drafts yet for this job." />
+        )}
+      </div>
+    </SectionCard>
+  );
+}
+
+function InsightGroup({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] p-4">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">{title}</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {items.length > 0 ? (
+          items.map((item) => <StatusPill key={item} label={item} tone="neutral" />)
+        ) : (
+          <p className="text-sm text-[var(--muted-strong)]">No signals yet.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ActionButton({
+  label,
+  detail,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  detail: string;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] p-4 text-left transition hover:border-cyan-400/30 hover:bg-[var(--panel-3)] disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      <p className="text-sm font-semibold text-white">{label}</p>
+      <p className="mt-2 text-xs leading-6 text-[var(--muted)]">{detail}</p>
+    </button>
+  );
+}
+
+function SignalCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-3xl border border-[var(--line)] bg-[var(--panel)] px-4 py-4">
+      <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">{label}</p>
+      <p className="mt-2 text-lg font-semibold text-white">{value}</p>
+    </div>
+  );
+}
+
+function MiniDatum({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] px-4 py-3">
+      <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">{label}</p>
+      <p className="mt-2 break-words text-sm text-[var(--muted-strong)]">{value}</p>
+    </div>
+  );
+}
+
+function Input({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+        {label}
+      </span>
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full rounded-2xl border border-[var(--line)] bg-[var(--panel-3)] px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-400/40"
+      />
+    </label>
+  );
+}
+
+function TextArea({
+  label,
+  value,
+  onChange,
+  rows,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  rows: number;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+        {label}
+      </span>
+      <textarea
+        rows={rows}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full resize-y rounded-2xl border border-[var(--line)] bg-[var(--panel-3)] px-4 py-3 text-sm leading-7 text-white outline-none transition focus:border-cyan-400/40"
+      />
+    </label>
+  );
+}
+
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="rounded-3xl border border-dashed border-[var(--line-strong)] bg-[var(--panel-2)] px-5 py-6 text-sm leading-7 text-[var(--muted-strong)]">
+      {message}
+    </div>
+  );
+}
+
+function asStringList(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+}
+
+function asNamedList(collection: unknown, key: string, field: string) {
+  if (!collection || typeof collection !== "object") {
+    return [];
+  }
+
+  const items = (collection as Record<string, unknown>)[key];
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  return items
+    .map((item) => {
+      if (!item || typeof item !== "object") {
+        return null;
+      }
+      const value = (item as Record<string, unknown>)[field];
+      return typeof value === "string" ? value : null;
+    })
+    .filter((item): item is string => Boolean(item));
 }

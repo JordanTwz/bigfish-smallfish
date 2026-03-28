@@ -9,6 +9,7 @@ import type {
   OpportunityResponse,
   ResearchJobCreate,
   ResearchJobResponse,
+  RunCreate,
   RunResponse,
   SourceCandidateResponse,
 } from "./types";
@@ -43,6 +44,17 @@ export async function getHealth() {
 
 export async function listRuns() {
   return request<RunResponse[]>("/runs");
+}
+
+export async function createRun(payload: RunCreate) {
+  return request<RunResponse>("/runs", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getRun(runId: string) {
+  return request<RunResponse>(`/runs/${runId}`);
 }
 
 export async function createResearchJob(payload: ResearchJobCreate) {
