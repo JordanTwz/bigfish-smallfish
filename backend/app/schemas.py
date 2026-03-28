@@ -114,6 +114,11 @@ class BlogDraftPublishResponse(BaseModel):
     error_jsonb: dict[str, Any] | None = None
 
 
+class BlogDraftPublishWithCredentialsRequest(BaseModel):
+    username: str
+    password: str
+
+
 class BlogDraftJobResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -163,6 +163,29 @@ Fetch the drafts:
 curl http://localhost:8000/blog-draft-jobs/<blog_draft_job_id>/drafts
 ```
 
+Each generated draft now includes an `origin_endpoint` field so you can tell whether it came from:
+- `blog-drafts`
+- `persona-post-jobs`
+
+Fetch the newest generated draft:
+
+```bash
+curl http://localhost:8000/blog-drafts/latest
+```
+
+Fetch the 5 newest generated drafts across all origins:
+
+```bash
+curl http://localhost:8000/blog-drafts/latest-five
+```
+
+Fetch the 5 newest generated drafts for a single origin:
+
+```bash
+curl http://localhost:8000/blog-drafts/latest-five/blog-drafts
+curl http://localhost:8000/blog-drafts/latest-five/persona-post-jobs
+```
+
 ## Persona Posts
 
 Create persona-building drafts from two safe angles:
@@ -203,12 +226,34 @@ curl http://localhost:8000/persona-post-jobs/<persona_post_job_id>/drafts
 
 ## Mataroa Publish
 
-Fetch the latest generated blog draft and publish it to Mataroa with TinyFish:
+Publish the latest generated blog draft to Mataroa with TinyFish using `.env` credentials:
 
 ```bash
-curl http://localhost:8000/blog-drafts/latest
 curl -X POST http://localhost:8000/blog-drafts/latest/publish
 ```
+
+Publish a specific generated draft by blog draft ID using `.env` credentials:
+
+```bash
+curl -X POST http://localhost:8000/blog-drafts/<blog_draft_id>/publish
+```
+
+Publish a specific generated draft by blog draft ID using request-supplied credentials:
+
+```bash
+curl -X POST http://localhost:8000/blog-drafts/<blog_draft_id>/publish-with-credentials \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "your_mataroa_username",
+    "password": "your_mataroa_password"
+  }'
+```
+
+These publish endpoints return:
+- the selected draft
+- the TinyFish run ID
+- the final TinyFish status
+- the returned Mataroa URL when TinyFish captures it
 
 ## Debug Endpoints
 

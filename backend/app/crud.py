@@ -196,6 +196,10 @@ def get_blog_draft_job(db: Session, blog_draft_job_id: UUID) -> BlogDraftJob | N
     return db.get(BlogDraftJob, blog_draft_job_id)
 
 
+def get_blog_draft(db: Session, blog_draft_id: UUID) -> BlogDraft | None:
+    return db.get(BlogDraft, blog_draft_id)
+
+
 def list_blog_drafts(db: Session, blog_draft_job_id: UUID) -> list[BlogDraft]:
     stmt = select(BlogDraft).where(BlogDraft.blog_draft_job_id == blog_draft_job_id)
     return list(db.scalars(stmt.order_by(BlogDraft.created_at.asc())))

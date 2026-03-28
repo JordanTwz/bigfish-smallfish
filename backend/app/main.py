@@ -11,6 +11,7 @@ from app.schemas import (
     BlogDraftJobCreate,
     BlogDraftJobResponse,
     BlogDraftPublishResponse,
+    BlogDraftPublishWithCredentialsRequest,
     BlogDraftResponse,
     MonitorEventResponse,
     MonitorJobCreate,
@@ -24,7 +25,7 @@ from app.schemas import (
     SourceCandidateResponse,
 )
 from app.services.blog_drafts import enqueue_blog_draft_job
-from app.services.mataroa_publisher import MataroaPublishError, publish_latest_blog_draft
+from app.services.mataroa_publisher import MataroaPublishError, publish_blog_draft, publish_latest_blog_draft
 from app.services.monitoring import build_research_snapshot, enqueue_monitor_refresh
 from app.services.opportunity_engine import enqueue_opportunity_job
 from app.services.orchestrator import enqueue_research_job
@@ -256,6 +257,55 @@ async def publish_latest_blog_draft_to_mataroa(
 ) -> BlogDraftPublishResponse:
     try:
         result = await publish_latest_blog_draft(db)
+    except MataroaPublishError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return BlogDraftPublishResponse(
+        draft=BlogDraftResponse.model_validate(result["draft"]),
+        tinyfish_run_id=result["tinyfish_run_id"],
+        status=result["status"],
+        published_url=result["published_url"],
+        result_jsonb=result["result_jsonb"],
+        error_jsonb=result["error_jsonb"],
+    )
+
+
+@app.post("/blog-drafts/{blog_draft_id}/publish", response_model=BlogDraftPublishResponse)
+async def publish_blog_draft_to_mataroa(
+    blog_draft_id: UUID,
+    db: Session = Depends(get_db),
+) -> BlogDraftPublishResponse:
+    draft = crud.get_blog_draft(db, blog_draft_id)
+    if draft is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Blog draft not found")
+    try:
+        result = await publish_blog_draft(draft)
+    except MataroaPublishError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return BlogDraftPublishResponse(
+        draft=BlogDraftResponse.model_validate(result["draft"]),
+        tinyfish_run_id=result["tinyfish_run_id"],
+        status=result["status"],
+        published_url=result["published_url"],
+        result_jsonb=result["result_jsonb"],
+        error_jsonb=result["error_jsonb"],
+    )
+
+
+@app.post("/blog-drafts/{blog_draft_id}/publish-with-credentials", response_model=BlogDraftPublishResponse)
+async def publish_blog_draft_to_mataroa_with_credentials(
+    blog_draft_id: UUID,
+    payload: BlogDraftPublishWithCredentialsRequest,
+    db: Session = Depends(get_db),
+) -> BlogDraftPublishResponse:
+    draft = crud.get_blog_draft(db, blog_draft_id)
+    if draft is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Blog draft not found")
+    try:
+        result = await publish_blog_draft(
+            draft,
+            username=payload.username,
+            password=payload.password,
+        )
     except MataroaPublishError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return BlogDraftPublishResponse(
