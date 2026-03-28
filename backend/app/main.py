@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app import crud
@@ -13,6 +13,7 @@ from app.schemas import (
     RunResponse,
     SourceCandidateResponse,
 )
+from app.services.orchestrator import enqueue_research_job
 
 app = FastAPI(title=settings.app_name)
 
@@ -41,8 +42,14 @@ def read_run(run_id: UUID, db: Session = Depends(get_db)) -> RunResponse:
 
 
 @app.post("/research-jobs", response_model=ResearchJobResponse, status_code=status.HTTP_201_CREATED)
-def create_research_job(payload: ResearchJobCreate, db: Session = Depends(get_db)) -> ResearchJobResponse:
-    return crud.create_research_job(db, payload)
+def create_research_job(
+    payload: ResearchJobCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> ResearchJobResponse:
+    research_job = crud.create_research_job(db, payload)
+    background_tasks.add_task(enqueue_research_job, str(research_job.id))
+    return research_job
 
 
 @app.get("/research-jobs/{job_id}", response_model=ResearchJobResponse)
