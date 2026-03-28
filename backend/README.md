@@ -42,6 +42,14 @@ The API runs at `http://localhost:8000`.
 curl http://localhost:8000/health
 ```
 
+## Example Story
+
+A client wants to build real public credibility with a specific target, such as an engineer, founder, researcher, or hiring manager they want to be noticed by. The backend starts by researching the target's public professional footprint with TinyFish, then extracts themes, interests, and safe content angles that are visible from public sources.
+
+From there, the client can use the opportunity engine to decide what to do next: publish a relevant technical post, strengthen a weak profile signal, contribute in a nearby technical community, or leave a thoughtful comment on a public surface the target is likely to respect. The monitoring flow keeps watching for new public signals, such as a new article, repo, or interest area, so the client can react at the right time instead of publishing blindly.
+
+The content-generation endpoints then turn those insights into reviewable drafts. The goal is not imitation or fake familiarity. The goal is to help the client show visible depth, aligned interests, and authentic technical taste in places the target might naturally encounter.
+
 ## Main Flow
 
 ### 1. Create a research job
