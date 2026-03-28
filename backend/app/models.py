@@ -130,6 +130,7 @@ class BlogDraftJob(Base):
     goal: Mapped[str] = mapped_column(String(64), default="resonance")
     draft_count: Mapped[int] = mapped_column(default=3)
     target_length: Mapped[str] = mapped_column(String(32), default="medium")
+    origin_endpoint: Mapped[str] = mapped_column(String(64), default="blog-drafts")
     style_constraints: Mapped[str | None] = mapped_column(String(4096))
     persona_constraints: Mapped[str | None] = mapped_column(String(4096))
     client_name: Mapped[str | None] = mapped_column(String(255))
@@ -159,6 +160,7 @@ class BlogDraft(Base):
         PGUUID(as_uuid=True), ForeignKey("blog_draft_jobs.id", ondelete="CASCADE"), index=True
     )
     title: Mapped[str] = mapped_column(String(512))
+    origin_endpoint: Mapped[str] = mapped_column(String(64), default="blog-drafts")
     angle: Mapped[str] = mapped_column(String(64), default="client_voice")
     author_mode: Mapped[str] = mapped_column(String(64), default="client_voice")
     slug_suggestion: Mapped[str | None] = mapped_column(String(512))

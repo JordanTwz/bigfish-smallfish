@@ -172,12 +172,19 @@ def create_source_candidate(
     return source_candidate
 
 
-def create_blog_draft_job(db: Session, research_job: ResearchJob, payload: BlogDraftJobCreate) -> BlogDraftJob:
+def create_blog_draft_job(
+    db: Session,
+    research_job: ResearchJob,
+    payload: BlogDraftJobCreate,
+    *,
+    origin_endpoint: str,
+) -> BlogDraftJob:
     blog_draft_job = BlogDraftJob(
         research_job_id=research_job.id,
         goal=payload.goal,
         draft_count=payload.draft_count,
         target_length=payload.target_length,
+        origin_endpoint=origin_endpoint,
         style_constraints=payload.style_constraints,
         persona_constraints=payload.persona_constraints,
         client_name=payload.client_name or research_job.client_name,
@@ -198,10 +205,26 @@ def list_blog_draft_jobs_for_research_job(db: Session, research_job_id: UUID) ->
     stmt = select(BlogDraftJob).where(BlogDraftJob.research_job_id == research_job_id)
     return list(db.scalars(stmt.order_by(BlogDraftJob.created_at.desc())))
 
+def get_blog_draft(db: Session, blog_draft_id: UUID) -> BlogDraft | None:
+    return db.get(BlogDraft, blog_draft_id)
+
 
 def list_blog_drafts(db: Session, blog_draft_job_id: UUID) -> list[BlogDraft]:
     stmt = select(BlogDraft).where(BlogDraft.blog_draft_job_id == blog_draft_job_id)
     return list(db.scalars(stmt.order_by(BlogDraft.created_at.asc())))
+
+
+def list_latest_blog_drafts(
+    db: Session,
+    *,
+    limit: int = 5,
+    origin_endpoint: str | None = None,
+) -> list[BlogDraft]:
+    stmt = select(BlogDraft)
+    if origin_endpoint is not None:
+        stmt = stmt.where(BlogDraft.origin_endpoint == origin_endpoint)
+    stmt = stmt.order_by(BlogDraft.created_at.desc()).limit(limit)
+    return list(db.scalars(stmt))
 
 
 def get_latest_blog_draft(db: Session) -> BlogDraft | None:
@@ -237,6 +260,7 @@ def create_blog_draft(
     *,
     blog_draft_job_id: UUID,
     title: str,
+    origin_endpoint: str,
     angle: str,
     author_mode: str,
     slug_suggestion: str | None,
@@ -253,6 +277,7 @@ def create_blog_draft(
     blog_draft = BlogDraft(
         blog_draft_job_id=blog_draft_job_id,
         title=title,
+        origin_endpoint=origin_endpoint,
         angle=angle,
         author_mode=author_mode,
         slug_suggestion=slug_suggestion,

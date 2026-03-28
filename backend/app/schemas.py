@@ -88,6 +88,7 @@ class BlogDraftResponse(BaseModel):
     id: UUID
     blog_draft_job_id: UUID
     title: str
+    origin_endpoint: str
     angle: str
     author_mode: str
     slug_suggestion: str | None
@@ -113,6 +114,11 @@ class BlogDraftPublishResponse(BaseModel):
     error_jsonb: dict[str, Any] | None = None
 
 
+class BlogDraftPublishWithCredentialsRequest(BaseModel):
+    username: str
+    password: str
+
+
 class BlogDraftJobResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -122,6 +128,7 @@ class BlogDraftJobResponse(BaseModel):
     goal: str
     draft_count: int
     target_length: str
+    origin_endpoint: str
     style_constraints: str | None
     persona_constraints: str | None
     client_name: str | None

@@ -21,10 +21,18 @@ async def publish_latest_blog_draft(db) -> dict[str, Any]:
     return await publish_blog_draft(draft)
 
 
-async def publish_blog_draft(draft: BlogDraft) -> dict[str, Any]:
-    if not settings.mataroa_username:
+async def publish_blog_draft(
+    draft: BlogDraft,
+    *,
+    username: str | None = None,
+    password: str | None = None,
+) -> dict[str, Any]:
+    resolved_username = username or settings.mataroa_username
+    resolved_password = password or settings.mataroa_password
+
+    if not resolved_username:
         raise MataroaPublishError("MATAROA_USERNAME is not configured")
-    if not settings.mataroa_password:
+    if not resolved_password:
         raise MataroaPublishError("MATAROA_PASSWORD is not configured")
 
     try:
@@ -34,7 +42,7 @@ async def publish_blog_draft(draft: BlogDraft) -> dict[str, Any]:
 
     start_payload = await client.start_run(
         url=settings.mataroa_login_url,
-        goal=_build_publish_goal(draft),
+        goal=_build_publish_goal(draft, username=resolved_username, password=resolved_password),
     )
     run_id = _extract_run_id(start_payload)
     final_payload = await _poll_run(client, run_id)
@@ -66,14 +74,14 @@ async def _poll_run(client: TinyfishClient, run_id: str) -> dict[str, Any]:
         await asyncio.sleep(settings.tinyfish_poll_interval_seconds)
 
 
-def _build_publish_goal(draft: BlogDraft) -> str:
+def _build_publish_goal(draft: BlogDraft, *, username: str, password: str) -> str:
     slug_hint = draft.slug_suggestion or ""
     return f"""
 Open the Mataroa login page and publish a blog post.
 
 Credentials:
-- Username: {settings.mataroa_username}
-- Password: {settings.mataroa_password}
+- Username: {username}
+- Password: {password}
 
 Steps:
 1. Log in to Mataroa at {settings.mataroa_base_url}.
