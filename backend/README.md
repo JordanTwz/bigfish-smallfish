@@ -109,3 +109,37 @@ curl --request GET \
   --url https://agent.tinyfish.ai/v1/runs/<tinyfish_run_id> \
   --header "X-API-Key: $TINYFISH_API_KEY"
 ```
+
+## Research Job API
+
+Create a research job:
+
+```bash
+curl -X POST http://localhost:8000/research-jobs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "candidate_name": "Jane Doe",
+    "company_name": "ExampleCo",
+    "company_domain": "example.com",
+    "role_title": "Engineering Manager",
+    "search_context": "Interview loop for senior backend engineer"
+  }'
+```
+
+Get the current job state:
+
+```bash
+curl http://localhost:8000/research-jobs/<job_id>
+```
+
+Get the discovered and extracted sources for a job:
+
+```bash
+curl http://localhost:8000/research-jobs/<job_id>/sources
+```
+
+Requeue a job manually:
+
+```bash
+curl -X POST http://localhost:8000/research-jobs/<job_id>/refresh
+```

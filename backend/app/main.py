@@ -66,3 +66,19 @@ def read_research_job_sources(job_id: UUID, db: Session = Depends(get_db)) -> li
     if research_job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Research job not found")
     return crud.list_research_job_sources(db, job_id)
+
+
+@app.post("/research-jobs/{job_id}/refresh", response_model=ResearchJobResponse)
+def refresh_research_job(
+    job_id: UUID,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> ResearchJobResponse:
+    research_job = crud.get_research_job(db, job_id)
+    if research_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Research job not found")
+    if research_job.status not in {"discovering", "extracting", "scoring"}:
+        crud.update_research_job_status(db, research_job, "queued")
+        background_tasks.add_task(enqueue_research_job, str(research_job.id))
+        research_job = crud.get_research_job(db, job_id)
+    return research_job
