@@ -178,16 +178,16 @@ const initialComposer: MissionComposerState = {
 };
 
 const initialClientProfileForm: ClientProfileFormState = {
-  name: "Northstar Ventures",
-  company: "Northstar Ventures",
-  roleTitle: "Platform advisory partner",
-  summary: "Hands-on technical advisor with a public point of view in platform engineering and AI operations.",
-  interestsText: "platform engineering, AI operations, observability",
-  strengthsText: "systems thinking, technical writing, engineering leadership",
-  goalsText: "build credibility with senior engineering leaders, publish thoughtful public writing",
-  proofPointsText: "led platform migrations, scaled developer tooling, writes architecture reviews",
-  constraintsText: "avoid hype, avoid generic thought leadership, stay grounded in direct experience",
-  profileNotes: "Prefers practical, operator-focused angles with explicit tradeoff analysis.",
+  name: "Kenneth",
+  company: "",
+  roleTitle: "Job seeker",
+  summary: "Job seeker targeting strong engineering teams and using public signals to prepare for dream-company conversations.",
+  interestsText: "backend systems, platform engineering, AI infrastructure",
+  strengthsText: "systems thinking, technical writing, backend engineering",
+  goalsText: "stand out with authentic technical depth, prepare for dream-company interviews",
+  proofPointsText: "backend projects, architecture writeups, engineering experiments",
+  constraintsText: "avoid overclaiming, avoid inauthentic networking, stay grounded in real experience",
+  profileNotes: "Wants target research, tailored prep, and publishing ideas that reflect genuine strengths.",
 };
 
 const defaultMonitorForm: MonitorFormState = {
@@ -407,7 +407,7 @@ function formatPercent(value: number | null) {
 
 function describeWorkspace(workspace: Workspace) {
   const company = workspace.companyName || workspace.researchJob?.company_name || "Independent";
-  return `${workspace.clientName} / ${workspace.candidateName} / ${company}`;
+  return `${workspace.candidateName} / ${company}`;
 }
 
 function deriveWorkspaceSignal(workspace: Workspace) {
@@ -588,16 +588,6 @@ export default function Home() {
 
     return clientTargets.filter((workspace) => describeWorkspace(workspace).toLowerCase().includes(query));
   }, [clientTargets, deferredWorkspaceQuery]);
-
-  const globalCounts = useMemo(
-    () => ({
-      total: workspaces.length,
-      activeResearch: workspaces.filter((workspace) => workspace.researchJob?.status && researchActiveStatuses.has(workspace.researchJob.status)).length,
-      monitored: workspaces.filter((workspace) => workspace.monitorJobId).length,
-      drafting: workspaces.filter((workspace) => isDraftJobActive(workspace.blogDraftJob) || isDraftJobActive(workspace.personaJob)).length,
-    }),
-    [workspaces],
-  );
 
   const mergeWorkspace = useCallback((workspaceId: string, updater: (workspace: Workspace) => Workspace) => {
     setWorkspaces((current) =>
@@ -824,7 +814,7 @@ export default function Home() {
       });
       await refreshWorkspace(workspace);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to launch research workspace.";
+      const message = error instanceof Error ? error.message : "Failed to create target.";
       window.alert(message);
     } finally {
       setLaunchingWorkspace(false);
@@ -1114,107 +1104,81 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.16),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(34,197,94,0.09),_transparent_22%),linear-gradient(180deg,_#06101f_0%,_#081423_36%,_#0b1524_100%)] text-[var(--text)]">
       <div className="mx-auto flex min-h-screen w-full max-w-[1760px] flex-col gap-6 px-4 py-5 sm:px-6 xl:px-8">
-        <header className="rounded-[32px] border border-[var(--line)] bg-[linear-gradient(135deg,rgba(9,19,33,0.98),rgba(7,15,27,0.9))] px-6 py-5 shadow-[0_28px_120px_rgba(2,6,23,0.48)]">
-          <div className="flex flex-col gap-5">
-            <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-              <div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="min-w-[260px]">
-                    <Select
-                      label="Client"
-                      value={composer.selectedProfileId}
-                      onChange={(value) => setComposer((current) => ({ ...current, selectedProfileId: value }))}
-                      options={clientProfiles.map((profile) => ({
-                        value: profile.id,
-                        label: profile.name,
-                      }))}
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingClientProfileId(null);
-                      setClientProfileForm(initialClientProfileForm);
-                      setShowClientManager((current) => !current);
-                    }}
-                    className="mt-6 rounded-2xl border border-cyan-400/40 bg-cyan-400/12 px-4 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/18"
-                  >
-                    {showClientManager ? "Close Client Panel" : "Add New Client"}
-                  </button>
-                </div>
+        <header className="rounded-[28px] border border-[var(--line)] bg-[linear-gradient(180deg,rgba(8,18,31,0.98),rgba(8,18,31,0.86))] px-5 py-4 shadow-[0_20px_80px_rgba(2,6,23,0.4)]">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="min-w-[260px]">
+                <Select
+                  label="You"
+                  value={composer.selectedProfileId}
+                  onChange={(value) => setComposer((current) => ({ ...current, selectedProfileId: value }))}
+                  options={clientProfiles.map((profile) => ({
+                    value: profile.id,
+                    label: profile.name,
+                  }))}
+                />
               </div>
-
-              <div>
-                {selectedClientProfile ? (
-                  <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] px-4 py-4">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
-                      Active client
-                    </p>
-                    <h2 className="mt-2 text-lg font-semibold text-white">{selectedClientProfile.name}</h2>
-                    <p className="mt-2 text-sm text-[var(--muted-strong)]">
-                      {selectedClientProfile.roleTitle}
-                      {selectedClientProfile.company ? ` · ${selectedClientProfile.company}` : ""}
-                    </p>
-                  </div>
-                ) : null}
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingClientProfileId(null);
+                  setClientProfileForm(initialClientProfileForm);
+                  setShowClientManager((current) => !current);
+                }}
+                className="rounded-2xl border border-cyan-400/40 bg-cyan-400/12 px-4 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/18"
+              >
+                {showClientManager ? "Close Profile" : "Add Profile"}
+              </button>
             </div>
 
-            <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-              <div>
+            <div className="min-w-0 xl:max-w-3xl">
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--muted)]">
                 Big Fish / Small Fish
               </p>
-              <h1 className="mt-3 font-display text-4xl tracking-[-0.05em] text-white sm:text-5xl">
-                Target Operations Console
+              <h1 className="mt-2 font-display text-2xl tracking-[-0.04em] text-white sm:text-3xl">
+                Target Research
               </h1>
-              <p className="mt-3 max-w-4xl text-sm leading-7 text-[var(--muted-strong)]">
-                Multi-client, multi-target mission control for research, opportunity ranking,
-                monitoring, long-form drafts, persona posts, health checks, and low-level TinyFish runs.
+              <p className="mt-2 text-sm leading-7 text-[var(--muted-strong)]">
+                Track people at the companies you want to reach, prepare tailored research, and generate ideas that fit your own background.
               </p>
-            </div>
-
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] px-4 py-3">
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">Workspaces</p>
-                  <p className="mt-2 text-2xl font-semibold text-white">{globalCounts.total}</p>
-                </div>
-                <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] px-4 py-3">
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">Selected client targets</p>
-                  <p className="mt-2 text-2xl font-semibold text-white">{clientTargets.length}</p>
-                </div>
-                <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] px-4 py-3">
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">Live research</p>
-                  <p className="mt-2 text-2xl font-semibold text-white">{globalCounts.activeResearch}</p>
-                </div>
-                <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] px-4 py-3">
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">Draft jobs</p>
-                  <p className="mt-2 text-2xl font-semibold text-white">{globalCounts.drafting}</p>
-                </div>
-              </div>
             </div>
           </div>
         </header>
 
         <div className="grid flex-1 gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-          <aside className="space-y-6">
-            <SectionCard
-              title="Targets"
-              subtitle="Every target belongs to the selected client profile."
-              action={
+          <aside className="rounded-[28px] border border-[var(--line)] bg-[rgba(8,18,31,0.72)] shadow-[0_24px_80px_rgba(2,6,23,0.32)]">
+            <div className="border-b border-[var(--line)] px-4 py-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+                    Targets
+                  </p>
+                  <p className="mt-1 text-sm text-[var(--muted-strong)]">
+                    {selectedClientProfile ? `${selectedClientProfile.name}'s target list` : "Select a profile"}
+                  </p>
+                </div>
                 <button
                   type="button"
                   onClick={() => setShowNewTargetForm((current) => !current)}
-                  className="rounded-2xl border border-cyan-400/40 bg-cyan-400/12 px-4 py-2 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/18"
+                  className="rounded-2xl border border-cyan-400/40 bg-cyan-400/12 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-100 transition hover:bg-cyan-400/18"
                 >
-                  {showNewTargetForm ? "Close" : "New Target"}
+                  {showNewTargetForm ? "Close" : "New"}
                 </button>
-              }
-            >
-              <div className="space-y-4">
-                <Input label="Filter targets" value={workspaceQuery} onChange={setWorkspaceQuery} />
-                {showNewTargetForm ? (
-                  <form className="space-y-4 rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] p-4" onSubmit={handleLaunchWorkspace}>
+              </div>
+              <div className="mt-4">
+                <Input label="Search" value={workspaceQuery} onChange={setWorkspaceQuery} />
+              </div>
+            </div>
+
+            <div className="space-y-4 p-4">
+              {showNewTargetForm ? (
+                <form className="space-y-4 rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] p-4" onSubmit={handleLaunchWorkspace}>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+                    New target
+                  </p>
+                  <p className="text-sm leading-7 text-[var(--muted-strong)]">
+                    Add someone you want to research at a company you care about.
+                  </p>
                     <Input
                       label="Target"
                       value={composer.candidateName}
@@ -1250,67 +1214,61 @@ export default function Home() {
                     >
                       {launchingWorkspace ? "Creating target..." : "Create Target"}
                     </button>
-                  </form>
-                ) : null}
-                <div className="space-y-3">
-                  {filteredWorkspaces.length > 0 ? (
-                    filteredWorkspaces.map((workspace) => (
-                      <button
-                        key={workspace.id}
-                        type="button"
-                        onClick={() =>
-                          startTransition(() => {
-                            setActiveWorkspaceId(workspace.id);
-                          })
-                        }
-                        className={`w-full rounded-2xl border px-4 py-4 text-left transition ${
-                          activeWorkspaceId === workspace.id
-                            ? "border-cyan-400/40 bg-cyan-400/10"
-                            : "border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--line-strong)]"
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <div>
-                            <h2 className="text-base font-semibold text-white">{workspace.candidateName}</h2>
-                            <p className="mt-1 text-sm text-[var(--muted-strong)]">
-                              {workspace.companyName || "Independent"} {workspace.roleTitle ? `· ${workspace.roleTitle}` : ""}
-                            </p>
-                          </div>
-                          <StatusPill
-                            label={getResearchSummaryStatus(workspace)}
-                            tone={deriveWorkspaceSignal(workspace)}
-                          />
+                </form>
+              ) : null}
+
+              <div className="space-y-2">
+                {filteredWorkspaces.length > 0 ? (
+                  filteredWorkspaces.map((workspace) => (
+                    <button
+                      key={workspace.id}
+                      type="button"
+                      onClick={() =>
+                        startTransition(() => {
+                          setActiveWorkspaceId(workspace.id);
+                        })
+                      }
+                      className={`w-full rounded-2xl border px-4 py-4 text-left transition ${
+                        activeWorkspaceId === workspace.id
+                          ? "border-cyan-400/40 bg-cyan-400/10"
+                          : "border-transparent bg-transparent hover:border-[var(--line)] hover:bg-[var(--panel-2)]"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h2 className="truncate text-sm font-semibold text-white">{workspace.candidateName}</h2>
+                          <p className="mt-1 truncate text-xs text-[var(--muted-strong)]">
+                            {workspace.companyName || "Independent"}
+                          </p>
                         </div>
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          {workspace.opportunityJobId ? <StatusPill label="opps" tone="active" /> : null}
-                          {workspace.monitorJobId ? <StatusPill label="monitor" tone="good" /> : null}
-                          {workspace.blogDraftJobId ? <StatusPill label="blog" tone="warning" /> : null}
-                          {workspace.personaJobId ? <StatusPill label="persona" tone="warning" /> : null}
-                        </div>
-                      </button>
-                    ))
-                  ) : (
-                    <div className="rounded-2xl border border-dashed border-[var(--line-strong)] bg-[var(--panel-2)] px-4 py-5 text-sm leading-7 text-[var(--muted-strong)]">
-                      {selectedClientProfile
-                        ? "No targets yet for this client. Create one from the panel above."
-                        : "Create or select a client profile first."}
-                    </div>
-                  )}
-                </div>
+                        <StatusPill
+                          label={getResearchSummaryStatus(workspace)}
+                          tone={deriveWorkspaceSignal(workspace)}
+                        />
+                      </div>
+                    </button>
+                  ))
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-[var(--line-strong)] bg-[var(--panel-2)] px-4 py-5 text-sm leading-7 text-[var(--muted-strong)]">
+                    {selectedClientProfile
+                      ? "No targets yet. Add someone at a company you want to reach."
+                      : "Create or select a profile first."}
+                  </div>
+                )}
               </div>
-            </SectionCard>
+            </div>
           </aside>
 
           <section className="space-y-6">
             {showClientManager ? (
               <SectionCard
-                title={editingClientProfileId ? "Edit Client" : "New Client"}
-                subtitle="Reusable client profile data now feeds research, opportunities, monitoring, and drafting."
+                title={editingClientProfileId ? "Edit Profile" : "New Profile"}
+                subtitle="This profile represents you. The app uses it to tailor target research, prep, and content ideas."
               >
                 <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
                   <form className="space-y-4" onSubmit={handleSaveClientProfile}>
                     <Input
-                      label="Profile name"
+                      label="Your name"
                       value={clientProfileForm.name}
                       onChange={(value) => setClientProfileForm((current) => ({ ...current, name: value }))}
                     />
@@ -1373,7 +1331,7 @@ export default function Home() {
                         type="submit"
                         className="rounded-2xl border border-cyan-400/40 bg-cyan-400/12 px-4 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/18"
                       >
-                        {editingClientProfileId ? "Update Client" : "Create Client"}
+                        {editingClientProfileId ? "Update Profile" : "Create Profile"}
                       </button>
                       <button
                         type="button"
@@ -1395,7 +1353,7 @@ export default function Home() {
                         <div className="flex flex-wrap items-start justify-between gap-4">
                           <div>
                             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
-                              {profile.company || "Client"}
+                              {profile.company || "Profile"}
                             </p>
                             <h2 className="mt-2 text-xl font-semibold text-white">{profile.name}</h2>
                             <p className="mt-2 text-sm text-[var(--muted-strong)]">{profile.roleTitle}</p>
@@ -1412,7 +1370,7 @@ export default function Home() {
                             }}
                             className="rounded-2xl border border-emerald-400/35 bg-emerald-400/10 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-400/16"
                           >
-                            Use Client
+                            Use Profile
                           </button>
                           <button
                             type="button"
@@ -1441,8 +1399,8 @@ export default function Home() {
                 <SectionCard
                   title="Target"
                   subtitle={describeWorkspace(activeWorkspace)}
-                  action={
-                    <div className="flex flex-wrap gap-2">
+                      action={
+                        <div className="flex flex-wrap gap-2">
                       <StatusPill label={activeWorkspace.clientName} tone="neutral" />
                       <StatusPill
                         label={activeWorkspace.researchJob?.status ?? "idle"}
@@ -1466,7 +1424,7 @@ export default function Home() {
                       </p>
                       {getClientProfileSummary(activeWorkspace.clientProfileJson) ? (
                         <p className="mt-4 max-w-3xl text-sm leading-7 text-[var(--muted-strong)]">
-                          Client profile context: {getClientProfileSummary(activeWorkspace.clientProfileJson)}
+                          Your profile context: {getClientProfileSummary(activeWorkspace.clientProfileJson)}
                         </p>
                       ) : null}
                       <div className="mt-5 flex flex-wrap gap-2">
@@ -1667,7 +1625,7 @@ export default function Home() {
                   <div className="space-y-6">
                     <SectionCard
                       title="Opportunity Engine"
-                      subtitle="Rank next-best actions for the client from current public evidence."
+                      subtitle="Rank next-best actions from the target's public evidence and your own profile."
                       action={
                         <button
                           type="button"
@@ -1859,7 +1817,7 @@ export default function Home() {
                   <div className="space-y-6">
                     <SectionCard
                       title="Persona Posts"
-                      subtitle="Generate client-voice and expert-commentary drafts without impersonation."
+                      subtitle="Generate first-person and expert-commentary drafts without impersonation."
                       action={
                         <div className="flex flex-wrap gap-3">
                           <button
@@ -1908,8 +1866,8 @@ export default function Home() {
                 <EmptyState
                   message={
                     selectedClientProfile
-                      ? "No target selected for this client."
-                      : "Select a client profile from the top-left dropdown to begin."
+                      ? "No target selected for this profile."
+                      : "Select your profile from the top-left dropdown to begin."
                   }
                 />
               </SectionCard>
