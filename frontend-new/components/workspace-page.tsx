@@ -583,10 +583,18 @@ function DraftCard({ item }: { item: BlogDraftResponse }) {
   );
 }
 
-function getDraftReadinessIssue(workspace: {
-  researchJob: { status: string } | null;
-  sources: Array<unknown>;
-}) {
+function getDraftReadinessIssue(
+  workspace:
+    | {
+        researchJob: { status: string } | null;
+        sources: Array<unknown>;
+      }
+    | null
+    | undefined,
+) {
+  if (!workspace) {
+    return "Loading workspace state...";
+  }
   const status = workspace.researchJob?.status;
   if (!status) {
     return "Run target research first before generating drafts.";
