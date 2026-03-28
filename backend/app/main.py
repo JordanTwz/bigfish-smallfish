@@ -235,6 +235,21 @@ def read_latest_blog_draft(db: Session = Depends(get_db)) -> BlogDraftResponse:
     return draft
 
 
+@app.get("/blog-drafts/latest-five", response_model=list[BlogDraftResponse])
+def read_latest_five_blog_drafts(db: Session = Depends(get_db)) -> list[BlogDraftResponse]:
+    return crud.list_latest_blog_drafts(db, limit=5)
+
+
+@app.get("/blog-drafts/latest-five/{origin_endpoint}", response_model=list[BlogDraftResponse])
+def read_latest_five_blog_drafts_by_origin(
+    origin_endpoint: str,
+    db: Session = Depends(get_db),
+) -> list[BlogDraftResponse]:
+    if origin_endpoint not in {"blog-drafts", "persona-post-jobs"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid origin endpoint")
+    return crud.list_latest_blog_drafts(db, limit=5, origin_endpoint=origin_endpoint)
+
+
 @app.post("/blog-drafts/latest/publish", response_model=BlogDraftPublishResponse)
 async def publish_latest_blog_draft_to_mataroa(
     db: Session = Depends(get_db),

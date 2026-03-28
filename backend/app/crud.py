@@ -201,6 +201,19 @@ def list_blog_drafts(db: Session, blog_draft_job_id: UUID) -> list[BlogDraft]:
     return list(db.scalars(stmt.order_by(BlogDraft.created_at.asc())))
 
 
+def list_latest_blog_drafts(
+    db: Session,
+    *,
+    limit: int = 5,
+    origin_endpoint: str | None = None,
+) -> list[BlogDraft]:
+    stmt = select(BlogDraft)
+    if origin_endpoint is not None:
+        stmt = stmt.where(BlogDraft.origin_endpoint == origin_endpoint)
+    stmt = stmt.order_by(BlogDraft.created_at.desc()).limit(limit)
+    return list(db.scalars(stmt))
+
+
 def get_latest_blog_draft(db: Session) -> BlogDraft | None:
     stmt = select(BlogDraft).order_by(BlogDraft.created_at.desc())
     return db.scalars(stmt).first()
