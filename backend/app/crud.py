@@ -181,6 +181,11 @@ def list_blog_drafts(db: Session, blog_draft_job_id: UUID) -> list[BlogDraft]:
     return list(db.scalars(stmt.order_by(BlogDraft.created_at.asc())))
 
 
+def get_latest_blog_draft(db: Session) -> BlogDraft | None:
+    stmt = select(BlogDraft).order_by(BlogDraft.created_at.desc())
+    return db.scalars(stmt).first()
+
+
 def update_blog_draft_job_status(
     db: Session,
     blog_draft_job: BlogDraftJob,

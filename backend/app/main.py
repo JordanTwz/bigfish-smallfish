@@ -10,6 +10,7 @@ from app.db import get_db
 from app.schemas import (
     BlogDraftJobCreate,
     BlogDraftJobResponse,
+    BlogDraftPublishResponse,
     BlogDraftResponse,
     ResearchJobCreate,
     ResearchJobResponse,
@@ -18,6 +19,7 @@ from app.schemas import (
     SourceCandidateResponse,
 )
 from app.services.blog_drafts import enqueue_blog_draft_job
+from app.services.mataroa_publisher import MataroaPublishError, publish_latest_blog_draft
 from app.services.orchestrator import enqueue_research_job
 
 app = FastAPI(title=settings.app_name)
@@ -130,6 +132,32 @@ def read_blog_drafts(blog_draft_job_id: UUID, db: Session = Depends(get_db)) -> 
     if blog_draft_job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Blog draft job not found")
     return crud.list_blog_drafts(db, blog_draft_job_id)
+
+
+@app.get("/blog-drafts/latest", response_model=BlogDraftResponse)
+def read_latest_blog_draft(db: Session = Depends(get_db)) -> BlogDraftResponse:
+    draft = crud.get_latest_blog_draft(db)
+    if draft is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No blog drafts found")
+    return draft
+
+
+@app.post("/blog-drafts/latest/publish", response_model=BlogDraftPublishResponse)
+async def publish_latest_blog_draft_to_mataroa(
+    db: Session = Depends(get_db),
+) -> BlogDraftPublishResponse:
+    try:
+        result = await publish_latest_blog_draft(db)
+    except MataroaPublishError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return BlogDraftPublishResponse(
+        draft=BlogDraftResponse.model_validate(result["draft"]),
+        tinyfish_run_id=result["tinyfish_run_id"],
+        status=result["status"],
+        published_url=result["published_url"],
+        result_jsonb=result["result_jsonb"],
+        error_jsonb=result["error_jsonb"],
+    )
 
 
 @app.post("/blog-draft-jobs/{blog_draft_job_id}/refresh", response_model=BlogDraftJobResponse)

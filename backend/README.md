@@ -41,6 +41,8 @@ Required environment variables in `.env`:
 DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/bigfish_smallfish
 TINYFISH_API_KEY=your_tinyfish_key_here
 OPENAI_API_KEY=your_openai_key_here
+MATAROA_USERNAME=your_mataroa_username
+MATAROA_PASSWORD=your_mataroa_password
 ```
 
 ## Start Postgres
@@ -158,11 +160,19 @@ curl http://localhost:8000/persona-post-jobs/<persona_post_job_id>
 curl http://localhost:8000/persona-post-jobs/<persona_post_job_id>/drafts
 ```
 
+11. Fetch the latest generated blog draft and publish it to Mataroa with TinyFish:
+
+```bash
+curl http://localhost:8000/blog-drafts/latest
+curl -X POST http://localhost:8000/blog-drafts/latest/publish
+```
+
 The overall lifecycle is:
 
 - `research-jobs` gather structured evidence about the target with TinyFish
 - `blog-draft-jobs` turn that evidence into reviewable technical article drafts with OpenAI
 - `persona-post-jobs` turn that evidence into client-facing and expert-commentary style persona drafts with OpenAI
+- `blog-drafts/latest/publish` takes the newest generated draft, logs into Mataroa with credentials from `.env`, and publishes it through TinyFish browser automation
 
 ## Debug Run API
 
@@ -424,3 +434,29 @@ Notes:
 
 - The returned drafts include `angle`, `author_mode`, and `disclosure_note`.
 - `expert_commentary` drafts are explicitly marked as non-attributed editorial commentary.
+
+## Mataroa Publish API
+
+This API publishes the newest generated draft in `blog_drafts` to Mataroa by using TinyFish to drive the browser flow.
+
+Required `.env` values:
+
+```env
+MATAROA_USERNAME=your_mataroa_username
+MATAROA_PASSWORD=your_mataroa_password
+TINYFISH_API_KEY=your_tinyfish_key_here
+```
+
+Fetch the newest generated draft:
+
+```bash
+curl http://localhost:8000/blog-drafts/latest
+```
+
+Publish that newest draft to Mataroa:
+
+```bash
+curl -X POST http://localhost:8000/blog-drafts/latest/publish
+```
+
+The publish response includes the selected draft, the TinyFish run ID, the final TinyFish status, and any returned post URL.
