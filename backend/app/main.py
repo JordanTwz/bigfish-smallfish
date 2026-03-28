@@ -10,7 +10,13 @@ from app.db import get_db
 from app.schemas import (
     BlogDraftJobCreate,
     BlogDraftJobResponse,
+    BlogDraftPublishResponse,
     BlogDraftResponse,
+    MonitorEventResponse,
+    MonitorJobCreate,
+    MonitorJobResponse,
+    OpportunityJobResponse,
+    OpportunityResponse,
     ResearchJobCreate,
     ResearchJobResponse,
     RunCreate,
@@ -18,6 +24,9 @@ from app.schemas import (
     SourceCandidateResponse,
 )
 from app.services.blog_drafts import enqueue_blog_draft_job
+from app.services.mataroa_publisher import MataroaPublishError, publish_latest_blog_draft
+from app.services.monitoring import build_research_snapshot, enqueue_monitor_refresh
+from app.services.opportunity_engine import enqueue_opportunity_job
 from app.services.orchestrator import enqueue_research_job
 
 app = FastAPI(title=settings.app_name)
@@ -98,6 +107,87 @@ def refresh_research_job(
 
 
 @app.post(
+    "/research-jobs/{job_id}/opportunities",
+    response_model=OpportunityJobResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_opportunity_job(
+    job_id: UUID,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> OpportunityJobResponse:
+    research_job = crud.get_research_job(db, job_id)
+    if research_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Research job not found")
+    opportunity_job = crud.create_opportunity_job(db, research_job)
+    background_tasks.add_task(enqueue_opportunity_job, str(opportunity_job.id))
+    return opportunity_job
+
+
+@app.get("/opportunity-jobs/{opportunity_job_id}", response_model=OpportunityJobResponse)
+def read_opportunity_job(opportunity_job_id: UUID, db: Session = Depends(get_db)) -> OpportunityJobResponse:
+    opportunity_job = crud.get_opportunity_job(db, opportunity_job_id)
+    if opportunity_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Opportunity job not found")
+    return opportunity_job
+
+
+@app.get("/opportunity-jobs/{opportunity_job_id}/items", response_model=list[OpportunityResponse])
+def read_opportunities(opportunity_job_id: UUID, db: Session = Depends(get_db)) -> list[OpportunityResponse]:
+    opportunity_job = crud.get_opportunity_job(db, opportunity_job_id)
+    if opportunity_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Opportunity job not found")
+    return crud.list_opportunities(db, opportunity_job_id)
+
+
+@app.post(
+    "/research-jobs/{job_id}/monitor",
+    response_model=MonitorJobResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_monitor_job(
+    job_id: UUID,
+    payload: MonitorJobCreate,
+    db: Session = Depends(get_db),
+) -> MonitorJobResponse:
+    research_job = crud.get_research_job(db, job_id)
+    if research_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Research job not found")
+    sources = crud.list_research_job_sources(db, job_id)
+    snapshot = build_research_snapshot(research_job, sources)
+    return crud.create_monitor_job(db, research_job, payload, snapshot)
+
+
+@app.get("/monitor-jobs/{monitor_job_id}", response_model=MonitorJobResponse)
+def read_monitor_job(monitor_job_id: UUID, db: Session = Depends(get_db)) -> MonitorJobResponse:
+    monitor_job = crud.get_monitor_job(db, monitor_job_id)
+    if monitor_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Monitor job not found")
+    return monitor_job
+
+
+@app.get("/monitor-jobs/{monitor_job_id}/events", response_model=list[MonitorEventResponse])
+def read_monitor_events(monitor_job_id: UUID, db: Session = Depends(get_db)) -> list[MonitorEventResponse]:
+    monitor_job = crud.get_monitor_job(db, monitor_job_id)
+    if monitor_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Monitor job not found")
+    return crud.list_monitor_events(db, monitor_job_id)
+
+
+@app.post("/monitor-jobs/{monitor_job_id}/refresh", response_model=MonitorJobResponse)
+def refresh_monitor_job(
+    monitor_job_id: UUID,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> MonitorJobResponse:
+    monitor_job = crud.get_monitor_job(db, monitor_job_id)
+    if monitor_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Monitor job not found")
+    background_tasks.add_task(enqueue_monitor_refresh, str(monitor_job.id))
+    return monitor_job
+
+
+@app.post(
     "/research-jobs/{job_id}/blog-drafts",
     response_model=BlogDraftJobResponse,
     status_code=status.HTTP_201_CREATED,
@@ -135,6 +225,32 @@ def read_blog_drafts(blog_draft_job_id: UUID, db: Session = Depends(get_db)) -> 
     if blog_draft_job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Blog draft job not found")
     return crud.list_blog_drafts(db, blog_draft_job_id)
+
+
+@app.get("/blog-drafts/latest", response_model=BlogDraftResponse)
+def read_latest_blog_draft(db: Session = Depends(get_db)) -> BlogDraftResponse:
+    draft = crud.get_latest_blog_draft(db)
+    if draft is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No blog drafts found")
+    return draft
+
+
+@app.post("/blog-drafts/latest/publish", response_model=BlogDraftPublishResponse)
+async def publish_latest_blog_draft_to_mataroa(
+    db: Session = Depends(get_db),
+) -> BlogDraftPublishResponse:
+    try:
+        result = await publish_latest_blog_draft(db)
+    except MataroaPublishError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return BlogDraftPublishResponse(
+        draft=BlogDraftResponse.model_validate(result["draft"]),
+        tinyfish_run_id=result["tinyfish_run_id"],
+        status=result["status"],
+        published_url=result["published_url"],
+        result_jsonb=result["result_jsonb"],
+        error_jsonb=result["error_jsonb"],
+    )
 
 
 @app.post("/blog-draft-jobs/{blog_draft_job_id}/refresh", response_model=BlogDraftJobResponse)

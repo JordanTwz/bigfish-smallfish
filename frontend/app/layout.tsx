@@ -1,20 +1,21 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Big Fish Small Fish",
+  title: "Big Fish Small Fish Ops Console",
   description:
-    "AI interviewer research dashboard for collecting evidence, tracking TinyFish runs, and generating prep briefs.",
+    "Palantir-style multi-target operations console for research, opportunity ranking, monitoring, and draft generation.",
 };
 
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode;
+  children: ReactNode;
 }>) {
   return (
     <html lang="en" className="h-full antialiased">
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col bg-background text-foreground">{children}</body>
     </html>
   );
 }

@@ -3,6 +3,14 @@ from urllib.parse import quote_plus
 from app.models import ResearchJob
 
 
+def _format_client_context(job: ResearchJob) -> str:
+    return f"""
+Client context:
+- Client name: {job.client_name}
+- Client profile: {job.client_profile_jsonb}
+""".strip()
+
+
 def build_discovery_targets(job: ResearchJob) -> list[dict[str, str]]:
     company = job.company_name or ""
     domain = job.company_domain or ""
@@ -39,6 +47,8 @@ def build_discovery_goal(job: ResearchJob, search_type: str) -> str:
     return f"""
 Find public professional pages about {job.candidate_name} related to {company}.
 Search focus: {search_type}.
+{_format_client_context(job)}
+Prioritize evidence that would help personalize advice, positioning, and content ideas for this specific client.
 Return JSON:
 {{
   "matches": [
@@ -68,6 +78,8 @@ def build_extraction_goal(job: ResearchJob, page_url: str) -> str:
     company = job.company_name or "the target company"
     return f"""
 Extract public professional information about {job.candidate_name} related to {company} from this page: {page_url}.
+{_format_client_context(job)}
+Favor extracting themes and signals that can help tailor recommendations and drafts to the client context.
 Return JSON:
 {{
   "person": {{
@@ -110,6 +122,7 @@ def build_resonance_profile_prompts(
     goal: str,
     seed_profile: dict,
     evidence_summary: list[dict],
+    discovery_insights: dict | None,
     style_constraints: str | None,
     persona_constraints: str | None,
 ) -> tuple[str, str]:
@@ -133,6 +146,9 @@ Seed profile:
 
 Evidence summary:
 {evidence_summary}
+
+Discovery insights:
+{discovery_insights}
 
 Style constraints:
 {style_constraints}
@@ -163,6 +179,7 @@ def build_blog_draft_prompts(
     target_length: str,
     resonance_profile: dict,
     evidence_summary: list[dict],
+    discovery_insights: dict | None,
     style_constraints: str | None,
     persona_constraints: str | None,
     client_name: str | None,
@@ -194,6 +211,9 @@ Resonance profile:
 Evidence summary:
 {evidence_summary}
 
+Discovery insights:
+{discovery_insights}
+
 Style constraints:
 {style_constraints}
 
@@ -215,6 +235,11 @@ Return JSON with:
       "slug_suggestion": "string",
       "summary": "string",
       "audience_fit_rationale": "string",
+      "discovery_alignment": {{
+        "used_interest_signals": ["string"],
+        "used_content_angles": ["string"],
+        "used_credibility_opportunities": ["string"]
+      }},
       "outline": {{
         "sections": ["string"]
       }},
@@ -237,6 +262,87 @@ Return JSON with:
       }}
     }}
   ]
+}}
+""".strip()
+    return system_prompt, user_prompt
+
+
+def build_discovery_insights_prompts(
+    *,
+    candidate_name: str,
+    company_name: str | None,
+    role_title: str | None,
+    search_context: str | None,
+    client_name: str | None,
+    client_profile: dict | None,
+    seed_profile: dict,
+    evidence_summary: list[dict],
+    heuristic_insights: dict,
+) -> tuple[str, str]:
+    system_prompt = """
+You analyze public-professional evidence about a target and return safe discovery insights.
+Output only valid JSON.
+Only use publicly visible, professionally relevant interests.
+Do not infer private life details, sensitive traits, or non-public personal information.
+Avoid creepy or manipulative recommendations.
+""".strip()
+
+    user_prompt = f"""
+Create safe discovery insights for a backend system.
+
+Target:
+- Name: {candidate_name}
+- Company: {company_name}
+- Role: {role_title}
+- Search context: {search_context}
+
+Client context:
+- Client name: {client_name}
+- Client profile: {client_profile}
+
+Seed profile:
+{seed_profile}
+
+Evidence summary:
+{evidence_summary}
+
+Heuristic insights:
+{heuristic_insights}
+
+Return JSON with:
+{{
+  "public_interest_signals": [
+    {{
+      "interest": "string",
+      "evidence_strength": "low | medium | high",
+      "visibility": "public",
+      "safe_use": "string"
+    }}
+  ],
+  "safe_content_angles": [
+    {{
+      "angle": "string",
+      "why_it_resonates": "string",
+      "client_fit_note": "string"
+    }}
+  ],
+  "engagement_opportunities": [
+    {{
+      "type": "commentary | talk_followup | open_source_engagement | community_participation",
+      "description": "string",
+      "candidate_urls": ["string"]
+    }}
+  ],
+  "contribution_opportunities": [
+    {{
+      "theme": "string",
+      "suggestion": "string",
+      "client_fit_note": "string"
+    }}
+  ],
+  "credibility_opportunities": ["string"],
+  "guardrails": ["string"],
+  "source_type_distribution": {{}}
 }}
 """.strip()
     return system_prompt, user_prompt

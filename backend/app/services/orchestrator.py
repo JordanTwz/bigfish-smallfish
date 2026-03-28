@@ -11,6 +11,7 @@ from app import crud
 from app.config import settings
 from app.db import SessionLocal
 from app.models import ResearchJob, SourceCandidate
+from app.services.discovery_insights import build_discovery_insights
 from app.services.prompt_templates import build_discovery_targets, build_extraction_goal
 from app.services.tinyfish import TinyfishClient, TinyfishError
 
@@ -240,10 +241,13 @@ def build_final_brief(job: ResearchJob, sources: list[SourceCandidate]) -> dict[
     top_sources = ranked_sources[:8]
     themes = _collect_themes(top_sources)
     top_themes = [theme for theme, _count in themes.most_common(4)]
+    discovery_insights = build_discovery_insights(job, top_sources)
 
     return {
         "candidate_name": job.candidate_name,
         "company_name": job.company_name,
+        "client_name": job.client_name,
+        "client_profile": job.client_profile_jsonb,
         "summary": f"Public-professional source brief for {job.candidate_name}.",
         "top_sources": [
             {
@@ -264,6 +268,12 @@ def build_final_brief(job: ResearchJob, sources: list[SourceCandidate]) -> dict[
             f"Ask how {job.candidate_name}'s team approaches {theme} in practice." for theme in top_themes[:3]
         ],
         "warnings": [] if top_sources else ["No strong public professional sources were found."],
+        "client_alignment": {
+            "client_name": job.client_name,
+            "profile_used": bool(job.client_profile_jsonb),
+            "guidance": "Use the client profile to filter recommendations toward authentic strengths, interests, and positioning.",
+        },
+        "discovery_insights": discovery_insights,
     }
 
 

@@ -31,6 +31,8 @@ def build_seed_profile(job: ResearchJob, sources: list[SourceCandidate]) -> dict
     return {
         "candidate_name": job.candidate_name,
         "company_name": job.company_name,
+        "client_name": job.client_name,
+        "client_profile": job.client_profile_jsonb,
         "top_themes": top_themes,
         "dominant_source_types": dominant_source_types,
         "technical_depth": "high" if len(top_themes) >= 3 else "medium",
